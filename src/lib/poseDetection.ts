@@ -107,11 +107,18 @@ export interface PoseResult {
   worldLandmarks: Landmark[];
 }
 
+// MediaPipe's VIDEO mode requires strictly increasing timestamps. Date.now()
+// can repeat or go backwards across concurrent callers (e.g. React StrictMode
+// double-mounting the capture loop), which makes detectForVideo throw and
+// silently kills landmark detection. A monotonic counter avoids that.
+let lastTimestamp = 0;
+
 export async function detectPose(videoElement: HTMLVideoElement): Promise<PoseResult | null> {
   if (!poseLandmarker) return null;
 
   try {
-    const result = poseLandmarker.detectForVideo(videoElement, Date.now());
+    lastTimestamp = Math.max(lastTimestamp + 1, performance.now());
+    const result = poseLandmarker.detectForVideo(videoElement, lastTimestamp);
     if (result.landmarks && result.landmarks.length > 0) {
       return {
         landmarks: result.landmarks[0],

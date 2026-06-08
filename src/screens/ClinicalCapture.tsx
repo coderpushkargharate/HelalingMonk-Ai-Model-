@@ -51,12 +51,23 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
         });
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.addEventListener('loadedmetadata', () => {
+          const video = videoRef.current;
+          video.srcObject = stream;
+          const begin = async () => {
+            try {
+              await video.play();
+            } catch {
+              /* autoplay may already be running */
+            }
             setReady(true);
             setStatus('Tracking...');
+            if (animationRef.current) cancelAnimationFrame(animationRef.current);
             loop();
-          });
+          };
+          // Start as soon as we have data; also handle the case where the event
+          // already fired before this listener was attached.
+          video.addEventListener('loadeddata', begin, { once: true });
+          if (video.readyState >= video.HAVE_CURRENT_DATA) begin();
         }
       } catch (err) {
         setStatus('Camera setup failed. Please allow camera access.');
@@ -74,22 +85,28 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const loop = async () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
-      const result = await detectPose(video);
-      if (result?.landmarks) {
-        latestLandmarks.current = result.landmarks;
-        setBodyDetected(true);
-        const measure = currentRef.current.measure(result.landmarks);
-        setLive(measure);
-        drawScene(canvas, video, result.landmarks, measure);
-      } else {
-        latestLandmarks.current = null;
-        setBodyDetected(false);
-        clearCanvas(canvas, video);
-        setLive(null);
+    try {
+      if (video && canvas && video.videoWidth > 0 && video.readyState >= video.HAVE_CURRENT_DATA) {
+        const result = await detectPose(video);
+        if (result?.landmarks && result.landmarks.length > 0) {
+          latestLandmarks.current = result.landmarks;
+          setBodyDetected(true);
+          const measure = currentRef.current.measure(result.landmarks);
+          setLive(measure);
+          drawScene(canvas, video, result.landmarks, measure);
+        } else {
+          latestLandmarks.current = null;
+          setBodyDetected(false);
+          clearCanvas(canvas, video);
+          setLive(null);
+        }
       }
+    } catch (err) {
+      // Never let a single bad frame kill the render loop.
+      console.error('pose loop frame error', err);
+    } finally {
+      animationRef.current = requestAnimationFrame(loop);
     }
-    animationRef.current = requestAnimationFrame(loop);
   };
 
   const clearCanvas = (canvas: HTMLCanvasElement, video: HTMLVideoElement) => {
@@ -116,12 +133,14 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
 
     const active = new Set(measure.points);
     const sevColor = measure.severity ? SEVERITY_COLOR[measure.severity] : '#9ca3af';
+    // Treat undefined visibility as visible so dots always render.
+    const seen = (i: number) => (lm[i]?.visibility ?? 1) > 0.3;
 
     // Skeleton lines.
     for (const [a, b] of CONNECTIONS) {
       const la = lm[a];
       const lb = lm[b];
-      if (!((la?.visibility ?? 0) > 0.4 && (lb?.visibility ?? 0) > 0.4)) continue;
+      if (!(seen(a) && seen(b) && la && lb)) continue;
       const highlight = active.has(a) && active.has(b);
       ctx.strokeStyle = highlight ? sevColor : 'rgba(56,189,248,0.9)'; // cyan skeleton
       ctx.lineWidth = highlight ? 6 : 4;
@@ -134,7 +153,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     // Landmark dots — every detected point gets a clear, visible dot.
     for (let i = 0; i < lm.length; i++) {
       const p = lm[i];
-      if ((p?.visibility ?? 0) < 0.4) continue;
+      if (!p || !seen(i)) continue;
       const isActive = active.has(i);
       const x = p.x * w;
       const y = p.y * h;
