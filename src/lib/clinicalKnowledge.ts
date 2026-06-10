@@ -75,7 +75,8 @@ export interface AssessmentCapture {
   assessmentId: string;
   value: number | null;
   severity: Severity | null;
-  imageData: string; // base64 snapshot with skeleton overlay
+  imageData: string; // base64 snapshot WITH the pose-points overlay
+  rawImageData?: string; // base64 snapshot of the original frame (no overlay)
   timestamp: number;
 }
 
@@ -125,11 +126,36 @@ const R_KNEE = 26;
 const L_ANK = 27;
 const R_ANK = 28;
 
+/** Front/back full-body alignment: worst of shoulder & hip horizontal tilt. */
+function fullBodyFrontMeasure(lm: Landmark[]): MeasureResult {
+  const haveSh = vis(lm, L_SHO) && vis(lm, R_SHO);
+  const haveHip = vis(lm, L_HIP) && vis(lm, R_HIP);
+  if (!haveSh && !haveHip) return notVisible([L_SHO, R_SHO, L_HIP, R_HIP]);
+  const sh = haveSh ? tiltFromHorizontal(lm, L_SHO, R_SHO) : 0;
+  const hip = haveHip ? tiltFromHorizontal(lm, L_HIP, R_HIP) : 0;
+  const dev = Math.round(Math.max(sh, hip));
+  const severity: Severity = dev <= 3 ? 'normal' : dev <= 6 ? 'mild' : dev <= 10 ? 'moderate' : 'severe';
+  return { value: dev, severity, points: [L_SHO, R_SHO, L_HIP, R_HIP], detail: `${dev}°` };
+}
+
+/** Side full-body alignment: how far the trunk (shoulder→hip) leans from vertical. */
+function fullBodySideMeasure(lm: Landmark[]): MeasureResult {
+  const haveSh = vis(lm, L_SHO) || vis(lm, R_SHO);
+  const haveHip = vis(lm, L_HIP) || vis(lm, R_HIP);
+  if (!haveSh || !haveHip) return notVisible([L_SHO, R_SHO, L_HIP, R_HIP]);
+  const side = betterSide(lm, L_SHO, R_SHO);
+  const sho = side === 'right' ? R_SHO : L_SHO;
+  const hip = side === 'right' ? R_HIP : L_HIP;
+  const dev = Math.round(tiltFromVertical(lm[sho].x, lm[sho].y, lm[hip].x, lm[hip].y));
+  const severity: Severity = dev <= 3 ? 'normal' : dev <= 6 ? 'mild' : dev <= 10 ? 'moderate' : 'severe';
+  return { value: dev, severity, points: [sho, hip], detail: `${dev}°` };
+}
+
 export const CLINICAL_ASSESSMENTS: ClinicalAssessment[] = [
   {
     id: 'full_body',
-    name: 'Full Body Posture',
-    nameHi: 'पूर्ण शरीर मुद्रा',
+    name: 'Full Body — Center (Front)',
+    nameHi: 'पूर्ण शरीर — सामने',
     bodyRegion: 'Full Body',
     category: 'Posture Assessment',
     view: 'front',
@@ -151,16 +177,88 @@ export const CLINICAL_ASSESSMENTS: ClinicalAssessment[] = [
     aiFeasibility: 'High',
     source: 'Clinical Experience',
     defaultSelected: true,
-    measure: (lm) => {
-      const haveSh = vis(lm, L_SHO) && vis(lm, R_SHO);
-      const haveHip = vis(lm, L_HIP) && vis(lm, R_HIP);
-      if (!haveSh && !haveHip) return notVisible([L_SHO, R_SHO, L_HIP, R_HIP]);
-      const sh = haveSh ? tiltFromHorizontal(lm, L_SHO, R_SHO) : 0;
-      const hip = haveHip ? tiltFromHorizontal(lm, L_HIP, R_HIP) : 0;
-      const dev = Math.round(Math.max(sh, hip));
-      const severity: Severity = dev <= 3 ? 'normal' : dev <= 6 ? 'mild' : dev <= 10 ? 'moderate' : 'severe';
-      return { value: dev, severity, points: [L_SHO, R_SHO, L_HIP, R_HIP], detail: `${dev}°` };
-    },
+    measure: fullBodyFrontMeasure,
+  },
+  {
+    id: 'full_body_back',
+    name: 'Full Body — Back',
+    nameHi: 'पूर्ण शरीर — पीछे',
+    bodyRegion: 'Full Body',
+    category: 'Posture Assessment',
+    view: 'back',
+    patientPosition: 'Standing',
+    instruction: 'Stand with your back to the camera, full body in frame, arms relaxed.',
+    instructionHi: 'कैमरे की ओर पीठ करके पूरे शरीर के साथ खड़े हों, हाथ ढीले रखें।',
+    complaints: ['General posture concern', 'Body imbalance', 'Spinal asymmetry'],
+    landmarkNames: ['Shoulders', 'Hips', 'Knees', 'Full skeleton'],
+    measurementName: 'Overall Alignment',
+    unit: '°',
+    ranges: { normal: '0–3°', mild: '3–6°', moderate: '6–10°', severe: '> 10°' },
+    painArea: 'Full Body',
+    painCorrelation: 'Observation Only',
+    exercises: [
+      { name: 'Postural Awareness Drill', sets: '2', reps: '10', frequency: 'Daily' },
+      { name: 'Wall Posture Hold', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Core Activation', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Clinical Experience',
+    defaultSelected: true,
+    measure: fullBodyFrontMeasure,
+  },
+  {
+    id: 'full_body_left',
+    name: 'Full Body — Left Side',
+    nameHi: 'पूर्ण शरीर — बाईं ओर',
+    bodyRegion: 'Full Body',
+    category: 'Posture Assessment',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand with your LEFT side to the camera, full body in frame, look straight ahead.',
+    instructionHi: 'कैमरे की ओर अपनी बाईं ओर करके खड़े हों, पूरा शरीर फ्रेम में रखें, सीधे आगे देखें।',
+    complaints: ['General posture concern', 'Forward lean', 'Slouching'],
+    landmarkNames: ['Shoulder', 'Hip', 'Vertical reference'],
+    measurementName: 'Trunk Vertical Lean',
+    unit: '°',
+    ranges: { normal: '0–3°', mild: '3–6°', moderate: '6–10°', severe: '> 10°' },
+    painArea: 'Full Body',
+    painCorrelation: 'Observation Only',
+    exercises: [
+      { name: 'Postural Awareness Drill', sets: '2', reps: '10', frequency: 'Daily' },
+      { name: 'Wall Posture Hold', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Core Activation', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Clinical Experience',
+    defaultSelected: true,
+    measure: fullBodySideMeasure,
+  },
+  {
+    id: 'full_body_right',
+    name: 'Full Body — Right Side',
+    nameHi: 'पूर्ण शरीर — दाईं ओर',
+    bodyRegion: 'Full Body',
+    category: 'Posture Assessment',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand with your RIGHT side to the camera, full body in frame, look straight ahead.',
+    instructionHi: 'कैमरे की ओर अपनी दाईं ओर करके खड़े हों, पूरा शरीर फ्रेम में रखें, सीधे आगे देखें।',
+    complaints: ['General posture concern', 'Forward lean', 'Slouching'],
+    landmarkNames: ['Shoulder', 'Hip', 'Vertical reference'],
+    measurementName: 'Trunk Vertical Lean',
+    unit: '°',
+    ranges: { normal: '0–3°', mild: '3–6°', moderate: '6–10°', severe: '> 10°' },
+    painArea: 'Full Body',
+    painCorrelation: 'Observation Only',
+    exercises: [
+      { name: 'Postural Awareness Drill', sets: '2', reps: '10', frequency: 'Daily' },
+      { name: 'Wall Posture Hold', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Core Activation', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Clinical Experience',
+    defaultSelected: true,
+    measure: fullBodySideMeasure,
   },
   {
     id: 'forward_head',

@@ -6,6 +6,7 @@ import {
   SEVERITY_LABEL,
   Severity,
 } from '../lib/clinicalKnowledge';
+import PoseIllustration from '../components/PoseIllustration';
 import { FileText, Printer, RotateCcw, Activity, AlertTriangle } from 'lucide-react';
 
 interface Props {
@@ -123,11 +124,25 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
                 return (
                   <div key={assessment.id} className="border border-gray-200 rounded-xl overflow-hidden">
                     <div className="flex flex-col md:flex-row">
-                      <img
-                        src={capture.imageData}
-                        alt={assessment.name}
-                        className="w-full md:w-56 h-44 object-cover bg-gray-900"
-                      />
+                      {/* Left: user's captured photo · Right: the selected position illustration */}
+                      <div className="grid grid-cols-2 md:w-[28rem] flex-shrink-0">
+                        <figure className="relative">
+                          <img
+                            src={capture.imageData || capture.rawImageData}
+                            alt={`${assessment.name} — AI pose analysis`}
+                            className="w-full h-44 object-cover bg-gray-900"
+                          />
+                          <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/60 text-white px-1.5 py-0.5 rounded">
+                            Your Photo (AI)
+                          </figcaption>
+                        </figure>
+                        <figure className="relative border-l border-gray-200 bg-slate-50 flex items-center justify-center">
+                          <PoseIllustration pose={assessment.id} className="w-full h-44" />
+                          <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/60 text-white px-1.5 py-0.5 rounded">
+                            Selected Position
+                          </figcaption>
+                        </figure>
+                      </div>
                       <div className="flex-1 p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>

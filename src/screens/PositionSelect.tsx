@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CLINICAL_ASSESSMENTS } from '../lib/clinicalKnowledge';
 import PoseIllustration from '../components/PoseIllustration';
+import Landmark33Diagram from '../components/Landmark33Diagram';
 import { CheckCircle2, ChevronLeft, AlertCircle, Activity } from 'lucide-react';
 
 interface Props {
@@ -52,6 +53,18 @@ export default function PositionSelect({ initial, onBack, onStart }: Props) {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6 text-sm text-blue-800">
           MediaPipe Pose detects and tracks 33 body landmarks in real time. Pick the poses below — the doctor will
           manually capture each one, and live points will show whether the position is correct or incorrect.
+        </div>
+
+        {/* All 33 MediaPipe landmark points reference */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-center gap-4">
+          <Landmark33Diagram className="w-40 h-56 flex-shrink-0" />
+          <div>
+            <h2 className="font-semibold text-gray-900">All 33 Pose Landmarks (3D)</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Every position below is measured from these 33 MediaPipe body points — face, shoulders, elbows,
+              wrists, hands, hips, knees, ankles and feet. Each numbered point is tracked live in 3D during capture.
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center justify-between mb-3">

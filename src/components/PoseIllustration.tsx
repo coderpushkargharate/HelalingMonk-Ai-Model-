@@ -38,6 +38,12 @@ function renderFigure(pose: string) {
       return <FrontFigure highlight={['head', 'neck']} headTilt={14} />;
     case 'knee_alignment':
       return <FrontFigure highlight={['legs']} markers={[[39, 101], [61, 101]]} />;
+    case 'full_body_left':
+      return <SideFigure highlight={['head', 'spine', 'legs']} markers={[[48, 43], [48, 80]]} />;
+    case 'full_body_right':
+      return <SideFigure flip highlight={['head', 'spine', 'legs']} markers={[[52, 43], [52, 80]]} />;
+    case 'full_body_back':
+      return <FrontFigure back highlight={['shoulders', 'spine', 'hips', 'legs', 'head']} />;
     case 'full_body':
     default:
       return <FrontFigure highlight={['shoulders', 'spine', 'hips', 'legs', 'head']} />;
@@ -49,15 +55,16 @@ interface FrontProps {
   headTilt?: number;
   lean?: number;
   markers?: [number, number][];
+  back?: boolean;
 }
 
-function FrontFigure({ highlight = [], headTilt = 0, lean = 0, markers = [] }: FrontProps) {
+function FrontFigure({ highlight = [], headTilt = 0, lean = 0, markers = [], back = false }: FrontProps) {
   const on = (r: string) => (highlight.includes(r) ? HL : BASE);
   const w = (r: string) => (highlight.includes(r) ? 4 : 2.5);
   return (
     <g fill="none" strokeLinecap="round">
       <g transform={`rotate(${headTilt} 50 30)`}>
-        <circle cx={50} cy={20} r={10} fill={SKIN} stroke={on('head')} strokeWidth={w('head')} />
+        <circle cx={50} cy={20} r={10} fill={back ? BASE : SKIN} stroke={on('head')} strokeWidth={w('head')} />
         <line x1={50} y1={30} x2={50} y2={40} stroke={on('neck')} strokeWidth={w('neck')} />
       </g>
       <line x1={34} y1={43} x2={66} y2={43} stroke={on('shoulders')} strokeWidth={w('shoulders')} />
@@ -77,14 +84,15 @@ interface SideProps {
   armRaised?: boolean;
   highlight?: string[];
   markers?: [number, number][];
+  flip?: boolean;
 }
 
-function SideFigure({ forwardHead = false, armRaised = false, highlight = [], markers = [] }: SideProps) {
+function SideFigure({ forwardHead = false, armRaised = false, highlight = [], markers = [], flip = false }: SideProps) {
   const on = (r: string) => (highlight.includes(r) ? HL : BASE);
   const w = (r: string) => (highlight.includes(r) ? 4 : 2.5);
   const headCx = forwardHead ? 60 : 50;
   return (
-    <g fill="none" strokeLinecap="round">
+    <g fill="none" strokeLinecap="round" transform={flip ? 'translate(100 0) scale(-1 1)' : undefined}>
       <circle cx={headCx} cy={20} r={10} fill={SKIN} stroke={on('head')} strokeWidth={w('head')} />
       <line x1={headCx} y1={30} x2={48} y2={43} stroke={on('neck')} strokeWidth={w('neck')} />
       <line x1={48} y1={43} x2={48} y2={80} stroke={on('spine')} strokeWidth={w('spine')} />

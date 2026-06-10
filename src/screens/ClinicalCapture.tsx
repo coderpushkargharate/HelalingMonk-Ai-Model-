@@ -196,8 +196,15 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     if (!canvas || !video) return;
     const lm = latestLandmarks.current;
 
-    // Compose video frame + dots overlay into one snapshot. The photo is taken
-    // directly from the current frame even if the pose isn't detected this tick.
+    // Raw snapshot: the original camera frame only (no overlay) → report left side.
+    const raw = document.createElement('canvas');
+    raw.width = video.videoWidth;
+    raw.height = video.videoHeight;
+    const rctx = raw.getContext('2d');
+    if (!rctx) return;
+    rctx.drawImage(video, 0, 0, raw.width, raw.height);
+
+    // Overlay snapshot: original frame + the live pose-points overlay → report right side.
     const out = document.createElement('canvas');
     out.width = video.videoWidth;
     out.height = video.videoHeight;
@@ -214,6 +221,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       value: measure.value,
       severity: measure.severity,
       imageData: out.toDataURL('image/jpeg', 0.85),
+      rawImageData: raw.toDataURL('image/jpeg', 0.85),
       timestamp: Date.now(),
     };
     setCaptures((prev) => ({ ...prev, [current.id]: capture }));
