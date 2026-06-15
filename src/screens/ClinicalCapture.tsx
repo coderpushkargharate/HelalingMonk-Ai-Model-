@@ -15,12 +15,34 @@ interface Props {
   onBack: () => void;
 }
 
-// Skeleton connections (MediaPipe Pose indices).
+// Skeleton connections (MediaPipe Pose indices) — full body.
 const CONNECTIONS: [number, number][] = [
-  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
-  [11, 23], [12, 24], [23, 24], [23, 25], [25, 27],
-  [24, 26], [26, 28], [7, 8], [0, 11], [0, 12],
+  // Torso + head
+  [11, 12], [11, 23], [12, 24], [23, 24], [7, 8], [0, 11], [0, 12],
+  // Arms
+  [11, 13], [13, 15], [12, 14], [14, 16],
+  // Hands
+  [15, 17], [15, 19], [15, 21], [16, 18], [16, 20], [16, 22],
+  // Legs
+  [23, 25], [25, 27], [24, 26], [26, 28],
+  // Feet
+  [27, 29], [29, 31], [27, 31], [28, 30], [30, 32], [28, 32],
 ];
+
+// X (in pixels) of the vertical "ideal" alignment line — a plumb dropped from
+// the ankle midpoint (the clinical posture reference), falling back to hips or
+// shoulders if the feet aren't visible.
+function idealLineX(lm: Landmark[], w: number): number | null {
+  const mid = (a: number, b: number): number | null => {
+    const la = lm[a];
+    const lb = lm[b];
+    if (la && lb && (la.visibility ?? 1) > 0.3 && (lb.visibility ?? 1) > 0.3) {
+      return ((la.x + lb.x) / 2) * w;
+    }
+    return null;
+  };
+  return mid(27, 28) ?? mid(23, 24) ?? mid(11, 12);
+}
 
 export default function ClinicalCapture({ assessments, onComplete, onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -130,6 +152,35 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
+
+    // Vertical "ideal" alignment line — drawn first so the skeleton and dots
+    // sit on top. Baked into the captured snapshot, so it appears on the report.
+    const refX = idealLineX(lm, w);
+    if (refX !== null) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,255,120,0.6)';
+      ctx.shadowBlur = 12;
+      ctx.strokeStyle = '#00e676';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([16, 12]);
+      ctx.beginPath();
+      ctx.moveTo(refX, 0);
+      ctx.lineTo(refX, h);
+      ctx.stroke();
+      ctx.restore();
+
+      // "IDEAL" tag at the top of the line.
+      ctx.save();
+      ctx.font = 'bold 18px Arial';
+      ctx.textBaseline = 'top';
+      const tag = 'IDEAL LINE';
+      const tw = ctx.measureText(tag).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(refX - tw / 2 - 6, 10, tw + 12, 26);
+      ctx.fillStyle = '#00e676';
+      ctx.fillText(tag, refX - tw / 2, 14);
+      ctx.restore();
+    }
 
     const active = new Set(measure.points);
     const sevColor = measure.severity ? SEVERITY_COLOR[measure.severity] : '#9ca3af';
