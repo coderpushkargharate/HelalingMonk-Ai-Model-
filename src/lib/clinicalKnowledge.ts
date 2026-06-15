@@ -519,3 +519,36 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
   moderate: 'Moderate Deviation',
   severe: 'Severe Deviation',
 };
+
+/**
+ * Per-assessment gauge configuration — drives the report's "Ideal vs Your value"
+ * deviation bar. `stops` are the three severity boundaries in value units,
+ * always ascending. `lowerIsBetter` flips the colour order: deviation metrics
+ * (tilt, lean) are healthiest near 0, while CVA and ROM are healthiest when high.
+ */
+export interface GaugeConfig {
+  min: number;
+  max: number;
+  /** The perfect target value (where the green "Ideal" marker sits). */
+  ideal: number;
+  /** Human-readable ideal target, e.g. "0°" or "≥ 50°". */
+  idealLabel: string;
+  /** Severity boundaries ascending: [a, b, c] → four zones. */
+  stops: [number, number, number];
+  /** true = smaller is healthier (deviation); false = larger is healthier (CVA, ROM). */
+  lowerIsBetter: boolean;
+}
+
+export const ASSESSMENT_GAUGE: Record<string, GaugeConfig> = {
+  full_body:            { min: 0, max: 15, ideal: 0, idealLabel: '0°', stops: [3, 6, 10], lowerIsBetter: true },
+  full_body_back:       { min: 0, max: 15, ideal: 0, idealLabel: '0°', stops: [3, 6, 10], lowerIsBetter: true },
+  full_body_left:       { min: 0, max: 15, ideal: 0, idealLabel: '0°', stops: [3, 6, 10], lowerIsBetter: true },
+  full_body_right:      { min: 0, max: 15, ideal: 0, idealLabel: '0°', stops: [3, 6, 10], lowerIsBetter: true },
+  forward_head:         { min: 30, max: 60, ideal: 55, idealLabel: '≥ 50°', stops: [40, 45, 50], lowerIsBetter: false },
+  shoulder_level:       { min: 0, max: 12, ideal: 0, idealLabel: '0°', stops: [2, 4, 7], lowerIsBetter: true },
+  pelvic_level:         { min: 0, max: 12, ideal: 0, idealLabel: '0°', stops: [2, 4, 7], lowerIsBetter: true },
+  lateral_spine:        { min: 0, max: 12, ideal: 0, idealLabel: '0°', stops: [2, 5, 8], lowerIsBetter: true },
+  head_tilt:            { min: 0, max: 12, ideal: 0, idealLabel: '0°', stops: [2, 4, 7], lowerIsBetter: true },
+  knee_alignment:       { min: 0, max: 30, ideal: 0, idealLabel: '0°', stops: [5, 10, 20], lowerIsBetter: true },
+  shoulder_flexion_rom: { min: 60, max: 180, ideal: 180, idealLabel: '≥ 160°', stops: [90, 140, 160], lowerIsBetter: false },
+};

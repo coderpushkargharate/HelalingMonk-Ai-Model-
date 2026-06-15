@@ -29,6 +29,15 @@ const CONNECTIONS: [number, number][] = [
   [27, 29], [29, 31], [27, 31], [28, 30], [30, 32], [28, 32],
 ];
 
+// Key posture joints labelled with their angle off the ideal line. For each,
+// the more-visible side is used and `tol` is the green/red threshold (degrees).
+const LABEL_JOINTS: { name: string; left: number; right: number; tol: number }[] = [
+  { name: 'Ear', left: 7, right: 8, tol: 6 },
+  { name: 'Shoulder', left: 11, right: 12, tol: 6 },
+  { name: 'Hip', left: 23, right: 24, tol: 5 },
+  { name: 'Knee', left: 25, right: 26, tol: 5 },
+];
+
 // X (in pixels) of the vertical "ideal" alignment line — a plumb dropped from
 // the ankle midpoint (the clinical posture reference), falling back to hips or
 // shoulders if the feet aren't visible.
@@ -153,31 +162,27 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
-    // Vertical "ideal" alignment line — drawn first so the skeleton and dots
-    // sit on top. Baked into the captured snapshot, so it appears on the report.
+    // Vertical "ideal" alignment line — a thin solid red plumb, drawn first so
+    // the skeleton and dots sit on top. Baked into the captured snapshot, so it
+    // appears on the report image.
     const refX = idealLineX(lm, w);
     if (refX !== null) {
       ctx.save();
-      ctx.shadowColor = 'rgba(0,255,120,0.6)';
-      ctx.shadowBlur = 12;
-      ctx.strokeStyle = '#00e676';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([16, 12]);
+      ctx.strokeStyle = '#ff2d2d';
+      ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(refX, 0);
       ctx.lineTo(refX, h);
       ctx.stroke();
-      ctx.restore();
 
       // "IDEAL" tag at the top of the line.
-      ctx.save();
       ctx.font = 'bold 18px Arial';
       ctx.textBaseline = 'top';
       const tag = 'IDEAL LINE';
       const tw = ctx.measureText(tag).width;
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(refX - tw / 2 - 6, 10, tw + 12, 26);
-      ctx.fillStyle = '#00e676';
+      ctx.fillStyle = '#ff5252';
       ctx.fillText(tag, refX - tw / 2, 14);
       ctx.restore();
     }
@@ -221,6 +226,48 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#0f172a';
       ctx.stroke();
+    }
+
+    // Per-joint deviation labels: each key joint's angle off the ideal line.
+    if (refX !== null) {
+      // Plumb pivot = ankle midpoint y (falls back to hips, then frame bottom).
+      const baseY = (() => {
+        const a = lm[27];
+        const b = lm[28];
+        if (a && b && (a.visibility ?? 1) > 0.3 && (b.visibility ?? 1) > 0.3) {
+          return ((a.y + b.y) / 2) * h;
+        }
+        const ha = lm[23];
+        const hb = lm[24];
+        if (ha && hb) return ((ha.y + hb.y) / 2) * h;
+        return h;
+      })();
+
+      const better = (l: number, r: number) =>
+        (lm[r]?.visibility ?? 0) > (lm[l]?.visibility ?? 0) ? r : l;
+
+      ctx.font = 'bold 16px Arial';
+      ctx.textBaseline = 'middle';
+      for (const j of LABEL_JOINTS) {
+        const idx = better(j.left, j.right);
+        const p = lm[idx];
+        if (!p || (p.visibility ?? 1) <= 0.3) continue;
+
+        const jx = p.x * w;
+        const jy = p.y * h;
+        const angle = Math.abs((Math.atan2(jx - refX, baseY - jy) * 180) / Math.PI);
+        const label = `${j.name} ${angle.toFixed(0)}°`;
+
+        // Place the label on the side the joint sits, away from the line.
+        const dir = jx >= refX ? 1 : -1;
+        const tw = ctx.measureText(label).width;
+        const lx = dir > 0 ? jx + 12 : jx - 12 - tw;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.62)';
+        ctx.fillRect(lx - 4, jy - 11, tw + 8, 22);
+        ctx.fillStyle = angle <= j.tol ? '#22c55e' : '#ff5252';
+        ctx.fillText(label, lx, jy);
+      }
     }
 
     // Measurement label near the first active landmark.
