@@ -1,29 +1,21 @@
-import { useState } from 'react';
 import { Activity, LogOut, UserPlus, CalendarDays } from 'lucide-react';
+import { Routes, Route, Navigate, Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import ReceptionDashboard from './ReceptionDashboard';
 import BookAppointment from './BookAppointment';
 import PatientForm from '../doctor/PatientForm';
 
-type View = 'schedule' | 'book' | 'register';
+// Reception URL space:
+//   /reception           → today's schedule
+//   /reception/register  → register patient (+ assign doctor)
+//   /reception/book      → book appointment
+const navCls = ({ isActive }: { isActive: boolean }) =>
+  `inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
+    isActive ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+  }`;
 
-// Top-level shell for the reception role: register patients (+ assign a doctor),
-// view the day's schedule, and book appointments.
-export default function ReceptionApp() {
+function Chrome() {
   const { user, logout } = useAuth();
-  const [view, setView] = useState<View>('register');
-
-  const navBtn = (target: View, label: string, Icon: typeof UserPlus) => (
-    <button
-      onClick={() => setView(target)}
-      className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
-        view === target ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-      }`}
-    >
-      <Icon className="w-4 h-4" /> {label}
-    </button>
-  );
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
@@ -51,27 +43,44 @@ export default function ReceptionApp() {
 
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 py-2 flex items-center gap-2">
-          {navBtn('register', 'Register patient', UserPlus)}
-          {navBtn('schedule', 'Schedule', CalendarDays)}
+          <NavLink to="/reception" end className={navCls}>
+            <CalendarDays className="w-4 h-4" /> Schedule
+          </NavLink>
+          <NavLink to="/reception/register" className={navCls}>
+            <UserPlus className="w-4 h-4" /> Register patient
+          </NavLink>
         </div>
       </div>
 
       <main className="px-4 py-8">
-        {view === 'register' && (
-          <PatientForm
-            showAssignDoctor
-            onBack={() => setView('schedule')}
-            onCreated={() => setView('schedule')}
-          />
-        )}
-        {view === 'schedule' && <ReceptionDashboard onBook={() => setView('book')} />}
-        {view === 'book' && (
-          <BookAppointment
-            onBack={() => setView('schedule')}
-            onBooked={() => setView('schedule')}
-          />
-        )}
+        <Outlet />
       </main>
     </div>
+  );
+}
+
+export default function ReceptionApp() {
+  const navigate = useNavigate();
+  return (
+    <Routes>
+      <Route element={<Chrome />}>
+        <Route index element={<ReceptionDashboard onBook={() => navigate('/reception/book')} />} />
+        <Route
+          path="register"
+          element={
+            <PatientForm
+              showAssignDoctor
+              onBack={() => navigate('/reception')}
+              onCreated={() => navigate('/reception')}
+            />
+          }
+        />
+        <Route
+          path="book"
+          element={<BookAppointment onBack={() => navigate('/reception')} onBooked={() => navigate('/reception')} />}
+        />
+      </Route>
+      <Route path="*" element={<Navigate to="/reception" replace />} />
+    </Routes>
   );
 }

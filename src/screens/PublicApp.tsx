@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Landing from './Landing';
 import PatientIntake from './PatientIntake';
 import PositionSelect from './PositionSelect';
@@ -6,18 +7,16 @@ import ClinicalCapture from './ClinicalCapture';
 import ClinicalReport from './ClinicalReport';
 import { CLINICAL_ASSESSMENTS, PatientInfo, AssessmentCapture } from '../lib/clinicalKnowledge';
 
-type Screen = 'landing' | 'patient_intake' | 'position_select' | 'clinical_capture' | 'clinical_report';
-
-interface Props {
-  /** Open the staff / patient (JWT) login screen. */
-  onLogin: () => void;
-}
-
-// The public (guest) experience: the home page plus the self-serve AI
-// assessment demo flow — patient details → select positions → capture → report.
-// Signed-in staff/patients get their role apps via <AppRoot>.
-export default function PublicApp({ onLogin }: Props) {
-  const [screen, setScreen] = useState<Screen>('landing');
+// The public (guest) experience with real URLs:
+//   /                      → home
+//   /assessment            → patient details
+//   /assessment/positions  → choose poses
+//   /assessment/capture    → live capture
+//   /assessment/report     → report
+// The free AI assessment demo. Flow state is held here; a hard refresh mid-flow
+// sends the user back to the start step.
+export default function PublicApp() {
+  const navigate = useNavigate();
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [assessmentIds, setAssessmentIds] = useState<string[]>([]);
   const [captures, setCaptures] = useState<AssessmentCapture[]>([]);
@@ -26,55 +25,82 @@ export default function PublicApp({ onLogin }: Props) {
     setPatient(null);
     setAssessmentIds([]);
     setCaptures([]);
-    setScreen('landing');
+    navigate('/');
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {screen === 'landing' && (
-        <Landing
-          onStart={() => setScreen('patient_intake')}
-          onLogin={onLogin}
-          user={null}
-          onLogout={() => {}}
+      <Routes>
+        <Route
+          index
+          element={
+            <Landing
+              onStart={() => navigate('/assessment')}
+              onLogin={() => navigate('/login')}
+              user={null}
+              onLogout={() => {}}
+            />
+          }
         />
-      )}
 
-      {screen === 'patient_intake' && (
-        <PatientIntake
-          initial={patient}
-          onNext={(info) => {
-            setPatient(info);
-            setScreen('position_select');
-          }}
+        <Route
+          path="assessment"
+          element={
+            <PatientIntake
+              initial={patient}
+              onNext={(info) => {
+                setPatient(info);
+                navigate('/assessment/positions');
+              }}
+            />
+          }
         />
-      )}
 
-      {screen === 'position_select' && (
-        <PositionSelect
-          initial={assessmentIds}
-          onBack={() => setScreen('patient_intake')}
-          onStart={(ids) => {
-            setAssessmentIds(ids);
-            setScreen('clinical_capture');
-          }}
+        <Route
+          path="assessment/positions"
+          element={
+            <PositionSelect
+              initial={assessmentIds}
+              onBack={() => navigate('/assessment')}
+              onStart={(ids) => {
+                setAssessmentIds(ids);
+                navigate('/assessment/capture');
+              }}
+            />
+          }
         />
-      )}
 
-      {screen === 'clinical_capture' && (
-        <ClinicalCapture
-          assessments={CLINICAL_ASSESSMENTS.filter((a) => assessmentIds.includes(a.id))}
-          onBack={() => setScreen('position_select')}
-          onComplete={(caps) => {
-            setCaptures(caps);
-            setScreen('clinical_report');
-          }}
+        <Route
+          path="assessment/capture"
+          element={
+            assessmentIds.length > 0 ? (
+              <ClinicalCapture
+                assessments={CLINICAL_ASSESSMENTS.filter((a) => assessmentIds.includes(a.id))}
+                onBack={() => navigate('/assessment/positions')}
+                onComplete={(caps) => {
+                  setCaptures(caps);
+                  navigate('/assessment/report');
+                }}
+              />
+            ) : (
+              <Navigate to="/assessment" replace />
+            )
+          }
         />
-      )}
 
-      {screen === 'clinical_report' && patient && (
-        <ClinicalReport patient={patient} captures={captures} onRestart={restart} />
-      )}
+        <Route
+          path="assessment/report"
+          element={
+            patient && captures.length > 0 ? (
+              <ClinicalReport patient={patient} captures={captures} onRestart={restart} />
+            ) : (
+              <Navigate to="/assessment" replace />
+            )
+          }
+        />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 }

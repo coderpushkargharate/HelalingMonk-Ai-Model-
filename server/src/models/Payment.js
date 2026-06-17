@@ -36,4 +36,5 @@ paymentSchema.methods.toJSONSafe = function toJSONSafe() {
   };
 };
 
-export const Payment = mongoose.model('Payment', paymentSchema);
+// Dedicated collection (keep all HealingMonk data in hm_* collections).
+export const Payment = mongoose.model('Payment', paymentSchema, 'hm_payments');

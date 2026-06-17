@@ -41,4 +41,6 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
   };
 };
 
-export const User = mongoose.model('User', userSchema);
+// Dedicated collection so HealingMonk never collides with the EzyLoan app that
+// shares this Atlas database (its `users` collection has a foreign username_1 index).
+export const User = mongoose.model('User', userSchema, 'hm_users');

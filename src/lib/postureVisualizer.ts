@@ -1,4 +1,5 @@
 import { Landmark } from './poseDetection';
+import type { Severity } from './clinicalKnowledge';
 
 export interface PosturePoint {
   landmarkIndex: number;
@@ -277,6 +278,90 @@ export function computePlumbLine(
   if (deviations.length === 0) return null;
 
   return { side, baseX: ankle.x, ankleY: ankle.y, topY, facingSign, deviations };
+}
+
+// ---- Ear → Shoulder → Hip → Knee → Ankle posture chain vs the ankle plumb ----
+
+export interface PostureChainJoint {
+  name: string;
+  index: number;
+  /** Normalized coordinates (0..1). */
+  x: number;
+  y: number;
+  /** Angle off the vertical ideal line, degrees (0 = perfectly aligned). */
+  angle: number;
+  aligned: boolean;
+  /** The ankle pivot the ideal line is dropped from (excluded from the score). */
+  isBase: boolean;
+}
+
+export interface PostureChain {
+  /** Normalized x of the vertical "ideal" line (ankle midpoint, falling back to hip/shoulder). */
+  lineX: number;
+  /** Normalized y of the pivot the angles are measured from (ankle midpoint). */
+  baseY: number;
+  /** Chain joints in head→foot order. */
+  joints: PostureChainJoint[];
+  /** Mean absolute angle of ear/shoulder/hip/knee off the line, degrees. */
+  score: number;
+  rating: Severity;
+}
+
+// Chain checkpoints, head→foot. The ankle is the base the plumb is dropped from.
+const CHAIN_POINTS: { name: string; left: number; right: number; tol: number; base?: boolean }[] = [
+  { name: 'Ear', left: 7, right: 8, tol: 6 },
+  { name: 'Shoulder', left: 11, right: 12, tol: 6 },
+  { name: 'Hip', left: 23, right: 24, tol: 5 },
+  { name: 'Knee', left: 25, right: 26, tol: 5 },
+  { name: 'Ankle', left: 27, right: 28, tol: 5, base: true },
+];
+
+/**
+ * Build the ear→shoulder→hip→knee→ankle posture chain and measure each joint's
+ * angular deviation from a vertical "ideal" line dropped through the ankle
+ * midpoint. Returns each joint (with its angle off the line) plus an aggregate
+ * deviation-from-ideal score and severity rating. Works for side and front
+ * views; `aspectRatio` should be the video's width / height so the angle is not
+ * distorted by the normalized-coordinate space.
+ */
+export function computePostureChain(landmarks: Landmark[], aspectRatio = 16 / 9): PostureChain | null {
+  if (landmarks.length < 33) return null;
+
+  // Treat undefined visibility as visible so dots always anchor the line.
+  const v = (l?: Landmark) => (l?.visibility ?? 1);
+  const midX = (a: number, b: number): number | null =>
+    v(landmarks[a]) > 0.3 && v(landmarks[b]) > 0.3 ? (landmarks[a].x + landmarks[b].x) / 2 : null;
+  const midY = (a: number, b: number): number | null =>
+    v(landmarks[a]) > 0.3 && v(landmarks[b]) > 0.3 ? (landmarks[a].y + landmarks[b].y) / 2 : null;
+
+  const lineX = midX(27, 28) ?? midX(23, 24) ?? midX(11, 12);
+  if (lineX === null) return null;
+  const baseY = midY(27, 28) ?? midY(23, 24) ?? 1;
+
+  const better = (l: number, r: number) => (v(landmarks[r]) > v(landmarks[l]) ? r : l);
+
+  const joints: PostureChainJoint[] = [];
+  let sum = 0;
+  let n = 0;
+  for (const c of CHAIN_POINTS) {
+    const idx = better(c.left, c.right);
+    const p = landmarks[idx];
+    if (!p || v(p) <= 0.3) continue;
+    const dx = Math.abs(p.x - lineX) * aspectRatio;
+    const dy = Math.abs(baseY - p.y) || 1e-6;
+    const angle = Math.round((Math.atan2(dx, dy) * (180 / Math.PI)) * 10) / 10;
+    const isBase = !!c.base;
+    joints.push({ name: c.name, index: idx, x: p.x, y: p.y, angle, aligned: angle <= c.tol, isBase });
+    if (!isBase) {
+      sum += angle;
+      n++;
+    }
+  }
+  if (joints.length === 0) return null;
+
+  const score = n > 0 ? Math.round((sum / n) * 10) / 10 : 0;
+  const rating: Severity = score <= 3 ? 'normal' : score <= 6 ? 'mild' : score <= 10 ? 'moderate' : 'severe';
+  return { lineX, baseY, joints, score, rating };
 }
 
 // Define correct posture thresholds for key landmarks

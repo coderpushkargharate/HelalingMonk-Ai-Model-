@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { initializePoseLandmarker, detectPose, Landmark } from '../lib/poseDetection';
+import { computePostureChain, PostureChain } from '../lib/postureVisualizer';
 import {
   ClinicalAssessment,
   AssessmentCapture,
@@ -29,30 +30,6 @@ const CONNECTIONS: [number, number][] = [
   [27, 29], [29, 31], [27, 31], [28, 30], [30, 32], [28, 32],
 ];
 
-// Key posture joints labelled with their angle off the ideal line. For each,
-// the more-visible side is used and `tol` is the green/red threshold (degrees).
-const LABEL_JOINTS: { name: string; left: number; right: number; tol: number }[] = [
-  { name: 'Ear', left: 7, right: 8, tol: 6 },
-  { name: 'Shoulder', left: 11, right: 12, tol: 6 },
-  { name: 'Hip', left: 23, right: 24, tol: 5 },
-  { name: 'Knee', left: 25, right: 26, tol: 5 },
-];
-
-// X (in pixels) of the vertical "ideal" alignment line — a plumb dropped from
-// the ankle midpoint (the clinical posture reference), falling back to hips or
-// shoulders if the feet aren't visible.
-function idealLineX(lm: Landmark[], w: number): number | null {
-  const mid = (a: number, b: number): number | null => {
-    const la = lm[a];
-    const lb = lm[b];
-    if (la && lb && (la.visibility ?? 1) > 0.3 && (lb.visibility ?? 1) > 0.3) {
-      return ((la.x + lb.x) / 2) * w;
-    }
-    return null;
-  };
-  return mid(27, 28) ?? mid(23, 24) ?? mid(11, 12);
-}
-
 export default function ClinicalCapture({ assessments, onComplete, onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,6 +40,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const [ready, setReady] = useState(false);
   const [status, setStatus] = useState('Loading pose model...');
   const [live, setLive] = useState<MeasureResult | null>(null);
+  const [livePosture, setLivePosture] = useState<PostureChain | null>(null);
   const [bodyDetected, setBodyDetected] = useState(false);
   const [flash, setFlash] = useState(false);
   const [captures, setCaptures] = useState<Record<string, AssessmentCapture>>({});
@@ -124,12 +102,15 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           setBodyDetected(true);
           const measure = currentRef.current.measure(result.landmarks);
           setLive(measure);
-          drawScene(canvas, video, result.landmarks, measure);
+          const chain = computePostureChain(result.landmarks, (video.videoWidth / video.videoHeight) || 16 / 9);
+          setLivePosture(chain);
+          drawScene(canvas, video, result.landmarks, measure, chain);
         } else {
           latestLandmarks.current = null;
           setBodyDetected(false);
           clearCanvas(canvas, video);
           setLive(null);
+          setLivePosture(null);
         }
       }
     } catch (err) {
@@ -152,7 +133,8 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     canvas: HTMLCanvasElement,
     video: HTMLVideoElement,
     lm: Landmark[],
-    measure: MeasureResult
+    measure: MeasureResult,
+    chain: PostureChain | null
   ) => {
     const w = video.videoWidth;
     const h = video.videoHeight;
@@ -162,27 +144,29 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
-    // Vertical "ideal" alignment line — a thin solid red plumb, drawn first so
-    // the skeleton and dots sit on top. Baked into the captured snapshot, so it
-    // appears on the report image.
-    const refX = idealLineX(lm, w);
+    // Vertical "ideal" alignment line — a green dashed plumb dropped through the
+    // ankle midpoint, drawn first so the skeleton, dots and posture line sit on
+    // top. Baked into the captured snapshot, so it appears on the report image.
+    const refX = chain ? chain.lineX * w : null;
     if (refX !== null) {
       ctx.save();
-      ctx.strokeStyle = '#ff2d2d';
+      ctx.setLineDash([10, 8]);
+      ctx.strokeStyle = '#22c55e';
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(refX, 0);
       ctx.lineTo(refX, h);
       ctx.stroke();
+      ctx.setLineDash([]);
 
       // "IDEAL" tag at the top of the line.
       ctx.font = 'bold 18px Arial';
       ctx.textBaseline = 'top';
-      const tag = 'IDEAL LINE';
+      const tag = 'IDEAL';
       const tw = ctx.measureText(tag).width;
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(refX - tw / 2 - 6, 10, tw + 12, 26);
-      ctx.fillStyle = '#ff5252';
+      ctx.fillStyle = '#22c55e';
       ctx.fillText(tag, refX - tw / 2, 14);
       ctx.restore();
     }
@@ -228,46 +212,57 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       ctx.stroke();
     }
 
-    // Per-joint deviation labels: each key joint's angle off the ideal line.
-    if (refX !== null) {
-      // Plumb pivot = ankle midpoint y (falls back to hips, then frame bottom).
-      const baseY = (() => {
-        const a = lm[27];
-        const b = lm[28];
-        if (a && b && (a.visibility ?? 1) > 0.3 && (b.visibility ?? 1) > 0.3) {
-          return ((a.y + b.y) / 2) * h;
-        }
-        const ha = lm[23];
-        const hb = lm[24];
-        if (ha && hb) return ((ha.y + hb.y) / 2) * h;
-        return h;
-      })();
+    // Actual posture line (ear → shoulder → hip → knee → ankle) plus per-joint
+    // angle labels off the ideal plumb, and the aggregate deviation score.
+    if (chain && refX !== null) {
+      const chainColor = SEVERITY_COLOR[chain.rating];
 
-      const better = (l: number, r: number) =>
-        (lm[r]?.visibility ?? 0) > (lm[l]?.visibility ?? 0) ? r : l;
+      // Posture line through the chain joints, coloured by overall deviation,
+      // with a white halo so it reads clearly over the cyan skeleton.
+      const pts = chain.joints.map((j) => ({ x: j.x * w, y: j.y * h }));
+      if (pts.length >= 2) {
+        ctx.save();
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 9;
+        ctx.beginPath();
+        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.strokeStyle = chainColor;
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+        ctx.restore();
+      }
 
+      // Per-joint labels (Ear / Shoulder / Hip / Knee / Ankle) with the angle off
+      // the ideal line; green within tolerance, red when deviated.
       ctx.font = 'bold 16px Arial';
       ctx.textBaseline = 'middle';
-      for (const j of LABEL_JOINTS) {
-        const idx = better(j.left, j.right);
-        const p = lm[idx];
-        if (!p || (p.visibility ?? 1) <= 0.3) continue;
-
-        const jx = p.x * w;
-        const jy = p.y * h;
-        const angle = Math.abs((Math.atan2(jx - refX, baseY - jy) * 180) / Math.PI);
-        const label = `${j.name} ${angle.toFixed(0)}°`;
-
-        // Place the label on the side the joint sits, away from the line.
+      for (const j of chain.joints) {
+        const jx = j.x * w;
+        const jy = j.y * h;
+        const label = j.isBase ? `${j.name} (base)` : `${j.name} ${j.angle.toFixed(0)}°`;
         const dir = jx >= refX ? 1 : -1;
         const tw = ctx.measureText(label).width;
         const lx = dir > 0 ? jx + 12 : jx - 12 - tw;
-
         ctx.fillStyle = 'rgba(0,0,0,0.62)';
         ctx.fillRect(lx - 4, jy - 11, tw + 8, 22);
-        ctx.fillStyle = angle <= j.tol ? '#22c55e' : '#ff5252';
+        ctx.fillStyle = j.isBase ? '#e2e8f0' : j.aligned ? '#22c55e' : '#ff5252';
         ctx.fillText(label, lx, jy);
       }
+
+      // Aggregate deviation-from-ideal score, top-centre.
+      const summary = `Deviation from ideal: ${chain.score.toFixed(0)}° · ${SEVERITY_LABEL[chain.rating]}`;
+      ctx.font = 'bold 18px Arial';
+      ctx.textBaseline = 'top';
+      const sw = ctx.measureText(summary).width;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      ctx.fillRect(w / 2 - sw / 2 - 8, 44, sw + 16, 28);
+      ctx.fillStyle = chainColor;
+      ctx.fillText(summary, w / 2 - sw / 2, 49);
     }
 
     // Measurement label near the first active landmark.
@@ -314,12 +309,24 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     const measure = lm
       ? current.measure(lm)
       : { value: null, severity: null, points: [], detail: 'N/A' };
+    const chain = lm
+      ? computePostureChain(lm, (video.videoWidth / video.videoHeight) || 16 / 9)
+      : null;
     const capture: AssessmentCapture = {
       assessmentId: current.id,
       value: measure.value,
       severity: measure.severity,
       imageData: out.toDataURL('image/jpeg', 0.85),
       rawImageData: raw.toDataURL('image/jpeg', 0.85),
+      postureDeviation: chain
+        ? {
+            score: chain.score,
+            rating: chain.rating,
+            joints: chain.joints
+              .filter((j) => !j.isBase)
+              .map((j) => ({ name: j.name, angle: j.angle, aligned: j.aligned })),
+          }
+        : undefined,
       timestamp: Date.now(),
     };
     setCaptures((prev) => ({ ...prev, [current.id]: capture }));
@@ -408,6 +415,19 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
             <span className="inline-block mt-2 text-xs text-gray-400">{status}</span>
           )}
         </div>
+
+        {livePosture && (
+          <div className="bg-black/55 backdrop-blur rounded-xl p-4 w-44 mt-3">
+            <p className="text-gray-300 text-xs">Deviation from ideal</p>
+            <p className="text-3xl font-bold text-white mt-1">{livePosture.score.toFixed(0)}°</p>
+            <span
+              className="inline-block mt-2 text-xs font-semibold px-2 py-1 rounded text-white"
+              style={{ backgroundColor: SEVERITY_COLOR[livePosture.rating] }}
+            >
+              {SEVERITY_LABEL[livePosture.rating]}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Bottom controls */}

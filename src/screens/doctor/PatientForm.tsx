@@ -1,17 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronLeft, UserPlus, AlertCircle } from 'lucide-react';
-import { createPatient, Patient } from '../../lib/auth';
+import { createPatient, listDoctors, AuthUser, Patient } from '../../lib/auth';
 
 interface Props {
   onBack: () => void;
   onCreated: (patient: Patient) => void;
+  /** Show a "Assign doctor" dropdown (reception flow). Doctors auto-assign themselves. */
+  showAssignDoctor?: boolean;
 }
 
 const PAIN_OPTIONS = ['Neck', 'Shoulder', 'Upper Back', 'Lower Back', 'Hip', 'Knee', 'Ankle'];
 
 // Reception-style intake: the data captured at the clinic entry (name, age,
 // gender, mobile, pain type). Used by the doctor to register a new patient.
-export default function PatientForm({ onBack, onCreated }: Props) {
+export default function PatientForm({ onBack, onCreated, showAssignDoctor = false }: Props) {
   const [form, setForm] = useState({
     name: '',
     age: '',
@@ -23,8 +25,18 @@ export default function PatientForm({ onBack, onCreated }: Props) {
     complaint: '',
   });
   const [painAreas, setPainAreas] = useState<string[]>([]);
+  const [doctors, setDoctors] = useState<AuthUser[]>([]);
+  const [doctorId, setDoctorId] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Load the doctor directory only when the assign dropdown is shown.
+  useEffect(() => {
+    if (!showAssignDoctor) return;
+    listDoctors()
+      .then((r) => setDoctors(r.users))
+      .catch(() => setDoctors([]));
+  }, [showAssignDoctor]);
 
   const set = (key: keyof typeof form, value: string) => setForm((f) => ({ ...f, [key]: value }));
   const togglePain = (area: string) =>
@@ -39,7 +51,11 @@ export default function PatientForm({ onBack, onCreated }: Props) {
     setError('');
     setSaving(true);
     try {
-      const { patient } = await createPatient({ ...form, painAreas });
+      const { patient } = await createPatient({
+        ...form,
+        painAreas,
+        ...(showAssignDoctor ? { assignedDoctor: doctorId || null } : {}),
+      });
       onCreated(patient);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not register patient');
@@ -98,6 +114,21 @@ export default function PatientForm({ onBack, onCreated }: Props) {
             <input className="input" type="number" value={form.weight} onChange={(e) => set('weight', e.target.value)} placeholder="68" />
           </Field>
         </div>
+
+        {showAssignDoctor && (
+          <div className="mt-4">
+            <Field label="Assign Doctor">
+              <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+                <option value="">Unassigned</option>
+                {doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    Dr. {d.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        )}
 
         <div className="mt-4">
           <p className="text-sm font-medium text-gray-700 mb-2">Problem / Pain Area(s)</p>

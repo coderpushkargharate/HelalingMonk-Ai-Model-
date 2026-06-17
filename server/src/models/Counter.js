@@ -7,7 +7,8 @@ const counterSchema = new mongoose.Schema({
   seq: { type: Number, default: 0 },
 });
 
-export const Counter = mongoose.model('Counter', counterSchema);
+// Dedicated collection (the shared EzyLoan DB also has a `counters` collection).
+export const Counter = mongoose.model('Counter', counterSchema, 'hm_counters');
 
 // Returns the next value for the named counter, incrementing atomically.
 export async function nextSeq(name) {

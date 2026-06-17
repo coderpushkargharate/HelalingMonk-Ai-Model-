@@ -1,17 +1,20 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Activity, Mail, Lock, User as UserIcon, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
 interface Props {
-  /** Return to the public home page. */
-  onBack: () => void;
+  /** Return to the public home page. Defaults to navigating to "/". */
+  onBack?: () => void;
 }
 
 // JWT login / self-signup against the Express API. Staff accounts
 // (doctor / reception / admin) are created by an admin, so they only sign in.
-// Patients may self-register here. On success, <AppRoot> routes by role.
+// Patients may self-register here. On success, App's /login route redirects by role.
 export default function Login({ onBack }: Props) {
   const { login, register } = useAuth();
+  const navigate = useNavigate();
+  const back = onBack ?? (() => navigate('/'));
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -41,7 +44,7 @@ export default function Login({ onBack }: Props) {
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50 flex flex-col">
       <div className="px-4 py-4">
         <button
-          onClick={onBack}
+          onClick={back}
           className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 font-medium"
         >
           <ArrowLeft className="w-4 h-4" /> Home

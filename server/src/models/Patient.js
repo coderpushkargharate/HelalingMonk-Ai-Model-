@@ -57,4 +57,5 @@ patientSchema.methods.toJSONSafe = function toJSONSafe() {
   };
 };
 
-export const Patient = mongoose.model('Patient', patientSchema);
+// Dedicated collection (the shared EzyLoan DB also has a `patients` collection).
+export const Patient = mongoose.model('Patient', patientSchema, 'hm_patients');

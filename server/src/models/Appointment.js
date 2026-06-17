@@ -34,4 +34,5 @@ appointmentSchema.methods.toJSONSafe = function toJSONSafe() {
   };
 };
 
-export const Appointment = mongoose.model('Appointment', appointmentSchema);
+// Dedicated collection (the shared EzyLoan DB also has an `appointments` collection).
+export const Appointment = mongoose.model('Appointment', appointmentSchema, 'hm_appointments');

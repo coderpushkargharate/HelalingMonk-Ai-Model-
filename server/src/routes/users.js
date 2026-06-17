@@ -6,7 +6,15 @@ import { sendMail, welcomeStaffEmail } from '../lib/mailer.js';
 
 const router = Router();
 
-// Every route here is admin-only.
+// Staff-accessible doctor directory for booking / assignment dropdowns. Declared
+// BEFORE the admin guard below so reception and doctors can read it too. Returns
+// only active doctors with safe fields.
+router.get('/doctors', requireAuth, requireRole('admin', 'doctor', 'reception'), async (_req, res) => {
+  const docs = await User.find({ role: 'doctor', active: true }).sort({ name: 1 });
+  res.json({ users: docs.map((u) => u.toSafeJSON()) });
+});
+
+// Every route below here is admin-only.
 router.use(requireAuth, requireRole('admin'));
 
 // List all users, optionally filtered by ?role=doctor

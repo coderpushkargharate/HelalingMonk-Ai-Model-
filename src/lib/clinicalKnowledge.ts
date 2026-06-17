@@ -71,12 +71,22 @@ export interface PatientInfo {
   complaint: string;
 }
 
+/** Aggregate deviation of the ear→shoulder→hip→knee chain from the ideal plumb line. */
+export interface CapturedPostureDeviation {
+  /** Mean absolute angle off the ideal vertical line, degrees. */
+  score: number;
+  rating: Severity;
+  joints: { name: string; angle: number; aligned: boolean }[];
+}
+
 export interface AssessmentCapture {
   assessmentId: string;
   value: number | null;
   severity: Severity | null;
   imageData: string; // base64 snapshot WITH the pose-points overlay
   rawImageData?: string; // base64 snapshot of the original frame (no overlay)
+  /** Posture-chain deviation from ideal at capture time (side/full-body views). */
+  postureDeviation?: CapturedPostureDeviation;
   timestamp: number;
 }
 

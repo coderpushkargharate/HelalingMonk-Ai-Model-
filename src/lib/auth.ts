@@ -78,6 +78,11 @@ export async function listUsers(role?: Role): Promise<{ users: AuthUser[] }> {
   return request(`/users${q}`);
 }
 
+// Staff-accessible doctor directory (for booking / assignment dropdowns).
+export async function listDoctors(): Promise<{ users: AuthUser[] }> {
+  return request('/users/doctors');
+}
+
 export async function createUser(payload: {
   name: string;
   email: string;
@@ -206,4 +211,70 @@ export async function updateReportNotes(id: string, doctorNotes: string): Promis
     method: 'PATCH',
     body: JSON.stringify({ doctorNotes }),
   });
+}
+
+// ---- Appointments ----
+
+export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+
+export interface Appointment {
+  id: string;
+  patient: { id: string; name: string } | string | null;
+  doctor: { id: string; name: string } | string | null;
+  scheduledAt: string;
+  durationMin: number;
+  reason: string;
+  status: AppointmentStatus;
+  notes?: string;
+  createdAt?: string;
+}
+
+export async function listAppointments(
+  opts: { date?: string; doctor?: string; patient?: string; status?: AppointmentStatus; scope?: 'all' } = {}
+): Promise<{ appointments: Appointment[] }> {
+  const params = new URLSearchParams();
+  if (opts.date) params.set('date', opts.date);
+  if (opts.doctor) params.set('doctor', opts.doctor);
+  if (opts.patient) params.set('patient', opts.patient);
+  if (opts.status) params.set('status', opts.status);
+  if (opts.scope === 'all') params.set('scope', 'all');
+  const qs = params.toString();
+  return request(`/appointments${qs ? `?${qs}` : ''}`);
+}
+
+export async function bookAppointment(payload: {
+  patientId: string;
+  doctorId?: string | null;
+  scheduledAt: string;
+  durationMin?: number;
+  reason?: string;
+}): Promise<{ appointment: Appointment }> {
+  return request('/appointments', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function rescheduleAppointment(id: string, scheduledAt: string): Promise<{ appointment: Appointment }> {
+  return request(`/appointments/${id}/reschedule`, {
+    method: 'PATCH',
+    body: JSON.stringify({ scheduledAt }),
+  });
+}
+
+export async function setAppointmentStatus(
+  id: string,
+  status: AppointmentStatus
+): Promise<{ appointment: Appointment }> {
+  return request(`/appointments/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+// ---- Patient self-service (matched to clinic record by email) ----
+
+export async function myReports(): Promise<{ reports: Report[] }> {
+  return request('/me/reports');
+}
+
+export async function myAppointments(): Promise<{ appointments: Appointment[] }> {
+  return request('/me/appointments');
 }

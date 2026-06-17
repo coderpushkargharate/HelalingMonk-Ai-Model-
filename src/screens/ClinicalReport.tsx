@@ -46,6 +46,17 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
   const maxPenalty = findings.length * 3 || 1;
   const overallScore = Math.max(0, Math.round(100 - (totalPenalty / maxPenalty) * 100));
 
+  // Headline "deviation from ideal" — prefer a side / full-body capture, else the
+  // capture whose chain measured the most joints. Needs ≥2 joints to be meaningful.
+  const postureFindings = findings.filter((f) => (f.capture.postureDeviation?.joints.length ?? 0) >= 2);
+  const primaryPosture =
+    (postureFindings.find((f) =>
+      ['full_body_left', 'full_body_right', 'forward_head'].includes(f.assessment.id)
+    ) ??
+      [...postureFindings].sort(
+        (a, b) => b.capture.postureDeviation!.joints.length - a.capture.postureDeviation!.joints.length
+      )[0])?.capture.postureDeviation ?? null;
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:py-0 print:bg-white">
       <div className="max-w-4xl mx-auto px-6 print:px-0">
@@ -125,6 +136,34 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
               <p className="text-sm text-gray-600">Findings Needing Attention</p>
             </div>
           </section>
+
+          {/* Headline postural alignment vs the ideal ear → shoulder → hip → ankle line */}
+          {primaryPosture && (
+            <section className="mb-6">
+              <div
+                className="rounded-xl border p-4 flex items-center gap-4"
+                style={{ borderColor: SEVERITY_COLOR[primaryPosture.rating], backgroundColor: '#f8fafc' }}
+              >
+                <div className="flex-shrink-0 text-center">
+                  <p className="text-3xl font-bold leading-none" style={{ color: SEVERITY_COLOR[primaryPosture.rating] }}>
+                    {primaryPosture.score.toFixed(0)}°
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">from ideal</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">
+                    Postural Alignment <span className="font-normal text-gray-500">(ear → shoulder → hip → ankle)</span>
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Overall deviation from the ideal vertical line is{' '}
+                    <b>{primaryPosture.score.toFixed(0)}°</b> ({SEVERITY_LABEL[primaryPosture.rating]}).
+                    {primaryPosture.joints.some((j) => !j.aligned) &&
+                      ` Out of alignment: ${primaryPosture.joints.filter((j) => !j.aligned).map((j) => j.name).join(', ')}.`}
+                  </p>
+                </div>
+              </div>
+            </section>
+          )}
 
           {/* Findings — grouped by camera view (Front / Side / Back), like a clinical posture report */}
           <section>
@@ -242,6 +281,35 @@ function FindingCard({
             <RangeCell label="Moderate" value={assessment.ranges.moderate} active={sev === 'moderate'} color={SEVERITY_COLOR.moderate} />
             <RangeCell label="Severe" value={assessment.ranges.severe} active={sev === 'severe'} color={SEVERITY_COLOR.severe} />
           </div>
+
+          {/* Deviation from the ideal ear → shoulder → hip → ankle line */}
+          {capture.postureDeviation && capture.postureDeviation.joints.length > 0 && (
+            <div className="mt-3 rounded-lg bg-slate-50 border border-slate-200 p-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-500">Deviation from ideal alignment</span>
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded text-white"
+                  style={{ backgroundColor: SEVERITY_COLOR[capture.postureDeviation.rating] }}
+                >
+                  {capture.postureDeviation.score.toFixed(0)}° · {SEVERITY_LABEL[capture.postureDeviation.rating]}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {capture.postureDeviation.joints.map((j) => (
+                  <span
+                    key={j.name}
+                    className="text-[10px] px-1.5 py-0.5 rounded"
+                    style={{
+                      backgroundColor: j.aligned ? '#dcfce7' : '#fee2e2',
+                      color: j.aligned ? '#166534' : '#991b1b',
+                    }}
+                  >
+                    {j.name} {j.angle.toFixed(0)}°
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">
             <span>Pain area: <b className="text-gray-700">{assessment.painArea}</b></span>

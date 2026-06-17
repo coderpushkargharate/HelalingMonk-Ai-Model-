@@ -6,6 +6,9 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import patientRoutes from './routes/patients.js';
 import reportRoutes from './routes/reports.js';
+import appointmentRoutes from './routes/appointments.js';
+import meRoutes from './routes/me.js';
+import publicRoutes from './routes/public.js';
 import { PERMISSIONS } from './permissions.js';
 
 const app = express();
@@ -27,6 +30,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/me', meRoutes);
+app.use('/api/public', publicRoutes);
 
 // Fallback error handler.
 app.use((err, _req, res, _next) => {

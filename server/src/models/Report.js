@@ -62,4 +62,5 @@ reportSchema.methods.toJSONSafe = function toJSONSafe() {
   };
 };
 
-export const Report = mongoose.model('Report', reportSchema);
+// Dedicated collection (the shared EzyLoan DB also has a `reports` collection).
+export const Report = mongoose.model('Report', reportSchema, 'hm_reports');
