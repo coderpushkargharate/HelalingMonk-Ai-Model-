@@ -8,7 +8,7 @@ import {
   SEVERITY_COLOR,
   SEVERITY_LABEL,
 } from '../lib/clinicalKnowledge';
-import { Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, SwitchCamera } from 'lucide-react';
 
 interface Props {
   assessments: ClinicalAssessment[];
@@ -35,9 +35,12 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const latestLandmarks = useRef<Landmark[] | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const [index, setIndex] = useState(0);
   const [ready, setReady] = useState(false);
+  // Which camera is live: 'user' = front (selfie), 'environment' = back.
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [status, setStatus] = useState('Loading pose model...');
   const [live, setLive] = useState<MeasureResult | null>(null);
   const [livePosture, setLivePosture] = useState<PostureChain | null>(null);
@@ -51,33 +54,53 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const currentRef = useRef(current);
   currentRef.current = current;
 
+  // (Re)open the camera with the requested lens, stopping any previous stream
+  // first so switching front↔back never leaves a second camera running.
+  const startStream = async (mode: 'user' | 'environment') => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+    streamRef.current = stream;
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = stream;
+    const begin = async () => {
+      try {
+        await video.play();
+      } catch {
+        /* autoplay may already be running */
+      }
+      setReady(true);
+      setStatus('Tracking...');
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      loop();
+    };
+    // Start as soon as we have data; also handle the case where the event
+    // already fired before this listener was attached.
+    video.addEventListener('loadeddata', begin, { once: true });
+    if (video.readyState >= video.HAVE_CURRENT_DATA) begin();
+  };
+
+  // Toggle between the front (selfie) and rear camera.
+  const flipCamera = async () => {
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(next);
+    setReady(false);
+    setStatus('Switching camera...');
+    try {
+      await startStream(next);
+    } catch (err) {
+      setStatus('Could not switch camera.');
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
-    let stream: MediaStream | null = null;
     const setup = async () => {
       try {
         await initializePoseLandmarker();
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
-        });
-        if (videoRef.current) {
-          const video = videoRef.current;
-          video.srcObject = stream;
-          const begin = async () => {
-            try {
-              await video.play();
-            } catch {
-              /* autoplay may already be running */
-            }
-            setReady(true);
-            setStatus('Tracking...');
-            if (animationRef.current) cancelAnimationFrame(animationRef.current);
-            loop();
-          };
-          // Start as soon as we have data; also handle the case where the event
-          // already fired before this listener was attached.
-          video.addEventListener('loadeddata', begin, { once: true });
-          if (video.readyState >= video.HAVE_CURRENT_DATA) begin();
-        }
+        await startStream('user');
       } catch (err) {
         setStatus('Camera setup failed. Please allow camera access.');
         console.error(err);
@@ -87,8 +110,9 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
 
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      stream?.getTracks().forEach((t) => t.stop());
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loop = async () => {
@@ -364,8 +388,16 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
         style={{ opacity: flash ? 0.85 : 0 }}
       />
 
-      {/* Body detection indicator */}
-      <div className="absolute top-24 right-4 z-20">
+      {/* Body detection indicator + camera flip */}
+      <div className="absolute top-24 right-4 z-20 flex items-center gap-2">
+        <button
+          onClick={flipCamera}
+          title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+          className="bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
+        >
+          <SwitchCamera className="w-4 h-4" />
+          {facingMode === 'user' ? 'Front' : 'Back'}
+        </button>
         <span
           className={`text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 ${
             bodyDetected ? 'bg-green-600 text-white' : 'bg-black/60 text-gray-300'

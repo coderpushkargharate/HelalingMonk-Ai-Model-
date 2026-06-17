@@ -3,7 +3,7 @@ import { initializePoseLandmarker, detectPose, drawPoseSkeleton } from '../lib/p
 import { analyzePosture } from '../lib/poseAnalyzer';
 import { PAIN_AREAS, PosePosition, CapturedImage } from '../lib/painAssessment';
 import { speak, stopSpeech } from '../lib/voiceService';
-import { Volume2, Camera, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Volume2, Camera, CheckCircle2, AlertCircle, SwitchCamera } from 'lucide-react';
 
 interface Props {
   selectedAreas: string[];
@@ -15,6 +15,8 @@ interface Props {
 export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip, language = 'hi' }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [currentAreaIndex, setCurrentAreaIndex] = useState(0);
   const [currentPositionIndex, setCurrentPositionIndex] = useState(0);
   const [status, setStatus] = useState('Loading...');
@@ -26,20 +28,42 @@ export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip
   const frameCountRef = useRef(0);
   const animationFrameRef = useRef<number>();
 
+  // (Re)open the camera with the requested lens, stopping any previous stream
+  // first so switching front↔back never leaves a second camera running.
+  const startStream = async (mode: 'user' | 'environment', onFirstReady?: () => void) => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      if (onFirstReady) {
+        videoRef.current.addEventListener('loadedmetadata', onFirstReady, { once: true });
+      }
+    }
+  };
+
+  // Toggle between the front (selfie) and rear camera.
+  const flipCamera = async () => {
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(next);
+    try {
+      await startStream(next);
+    } catch (err) {
+      setStatus('Could not switch camera');
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     const setup = async () => {
       try {
         await initializePoseLandmarker();
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+        await startStream('user', () => {
+          setPhase('guidance');
+          beginAssessment();
         });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.addEventListener('loadedmetadata', () => {
-            setPhase('guidance');
-            beginAssessment();
-          });
-        }
       } catch (err) {
         setStatus('Camera setup failed');
         console.error(err);
@@ -51,8 +75,10 @@ export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       stopSpeech();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const getCurrentArea = () => {
@@ -250,6 +276,16 @@ export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
       />
+
+      {/* Front/back camera toggle */}
+      <button
+        onClick={flipCamera}
+        title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+        className="absolute top-4 right-4 z-30 bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
+      >
+        <SwitchCamera className="w-4 h-4" />
+        {facingMode === 'user' ? 'Front' : 'Back'}
+      </button>
 
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black to-transparent p-4 z-20">

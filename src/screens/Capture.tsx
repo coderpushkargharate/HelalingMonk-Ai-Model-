@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { SwitchCamera } from 'lucide-react';
 import { initializePoseLandmarker, detectPose, drawPoseSkeleton, Landmark } from '../lib/poseDetection';
 import { analyzePosture, calculateMobilityScore, calculateStabilityScore } from '../lib/poseAnalyzer';
 import {
@@ -28,8 +29,10 @@ interface FrameData {
 export default function Capture({ onComplete }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [status, setStatus] = useState('Initializing...');
   const [countdown, setCountdown] = useState(0);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const [phase, setPhase] = useState<'loading' | 'positioning' | 'ready' | 'capturing' | 'processing'>('loading');
   const [detectionQuality, setDetectionQuality] = useState(0);
   const [sideReady, setSideReady] = useState(false);
@@ -39,22 +42,42 @@ export default function Capture({ onComplete }: Props) {
   const animationFrameRef = useRef<number>();
   const previewFrameRef = useRef<number>();
 
+  // (Re)open the camera with the requested lens, stopping any previous stream
+  // first so switching front↔back never leaves a second camera running.
+  const startStream = async (mode: 'user' | 'environment') => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }
+    });
+    streamRef.current = stream;
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.addEventListener('loadedmetadata', () => {
+        setPhase('positioning');
+        setStatus('Align your body to the green line');
+        renderCenterLineOnly(); // show the ideal line the moment the camera opens
+        startPreview();
+      }, { once: true });
+    }
+  };
+
+  // Toggle between the front (selfie) and rear camera.
+  const flipCamera = async () => {
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setFacingMode(next);
+    try {
+      await startStream(next);
+    } catch (err) {
+      setStatus('Could not switch camera');
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     const setup = async () => {
       try {
         await initializePoseLandmarker();
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.addEventListener('loadedmetadata', () => {
-            setPhase('positioning');
-            setStatus('Align your body to the green line');
-            renderCenterLineOnly(); // show the ideal line the moment the camera opens
-            startPreview();
-          });
-        }
+        await startStream('user');
       } catch (err) {
         setStatus('Camera setup failed');
         console.error(err);
@@ -69,7 +92,9 @@ export default function Capture({ onComplete }: Props) {
       if (previewFrameRef.current) {
         cancelAnimationFrame(previewFrameRef.current);
       }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const drawAnalysisFrame = (landmarks: Landmark[], videoWidth: number, videoHeight: number): CenterAlignment | null => {
@@ -324,6 +349,16 @@ export default function Capture({ onComplete }: Props) {
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
       />
+
+      {/* Front/back camera toggle */}
+      <button
+        onClick={flipCamera}
+        title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+        className="absolute top-4 right-4 z-20 bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
+      >
+        <SwitchCamera className="w-4 h-4" />
+        {facingMode === 'user' ? 'Front' : 'Back'}
+      </button>
 
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
         {phase === 'capturing' && countdown > 0 && (
