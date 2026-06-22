@@ -123,6 +123,7 @@ function betterSide(lm: Landmark[], left: number, right: number): 'left' | 'righ
 }
 
 // MediaPipe Pose landmark indices used below.
+const NOSE = 0;
 const L_EAR = 7;
 const R_EAR = 8;
 const L_SHO = 11;
@@ -137,6 +138,8 @@ const L_KNEE = 25;
 const R_KNEE = 26;
 const L_ANK = 27;
 const R_ANK = 28;
+const L_FOOT = 31;
+const R_FOOT = 32;
 
 /** Front/back full-body alignment: worst of shoulder & hip horizontal tilt. */
 function fullBodyFrontMeasure(lm: Landmark[]): MeasureResult {
@@ -844,6 +847,368 @@ export const CLINICAL_ASSESSMENTS: ClinicalAssessment[] = [
       return { value: angle, severity, points: [L_SHO, R_SHO, L_HIP, R_HIP], detail: `${angle}°` };
     },
   },
+
+  // ---------------- Cervical (neck) ----------------
+  {
+    id: 'cervical_flexion',
+    name: 'Cervical Flexion (Chin to Chest)',
+    nameHi: 'गर्दन का आगे मोड़',
+    bodyRegion: 'Cervical',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways to the camera and slowly drop your chin toward your chest as far as comfortable.',
+    instructionHi: 'कैमरे की ओर बगल से खड़े हों और धीरे-धीरे ठुड्डी को छाती की ओर जितना हो सके झुकाएं।',
+    complaints: ['Stiff neck', 'Reduced neck movement', 'Neck pain'],
+    landmarkNames: ['Ear', 'Shoulder', 'Vertical Reference'],
+    measurementName: 'Neck Flexion Angle',
+    unit: '°',
+    ranges: { normal: '≥ 45°', mild: '30–45°', moderate: '15–30°', severe: '< 15°' },
+    painArea: 'Neck',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Chin Tucks', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Neck Flexion Stretch', sets: '3', reps: '20 sec hold', frequency: 'Daily' },
+      { name: 'Deep Neck Flexor Activation', sets: '3', reps: '10', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'Medium',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_EAR, R_EAR);
+      const ear = side === 'right' ? R_EAR : L_EAR;
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      if (!vis(lm, ear) || !vis(lm, sho)) return notVisible([ear, sho]);
+      // As the chin drops, the ear travels forward of the shoulder — the
+      // shoulder→ear line tips further from vertical.
+      const angle = Math.round(tiltFromVertical(lm[sho].x, lm[sho].y, lm[ear].x, lm[ear].y));
+      const severity: Severity = angle >= 45 ? 'normal' : angle >= 30 ? 'mild' : angle >= 15 ? 'moderate' : 'severe';
+      return { value: angle, severity, points: [ear, sho], detail: `${angle}°` };
+    },
+  },
+  {
+    id: 'cervical_extension',
+    name: 'Cervical Extension (Look Up)',
+    nameHi: 'गर्दन का पीछे मोड़',
+    bodyRegion: 'Cervical',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways to the camera and slowly tip your head back to look up at the ceiling.',
+    instructionHi: 'कैमरे की ओर बगल से खड़े हों और धीरे-धीरे सिर पीछे झुकाकर छत की ओर देखें।',
+    complaints: ['Stiff neck', "Can't look up", 'Neck pain'],
+    landmarkNames: ['Nose', 'Ear', 'Horizontal Reference'],
+    measurementName: 'Neck Extension Angle',
+    unit: '°',
+    ranges: { normal: '≥ 40°', mild: '25–40°', moderate: '10–25°', severe: '< 10°' },
+    painArea: 'Neck',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Neck Extension Stretch', sets: '3', reps: '20 sec hold', frequency: 'Daily' },
+      { name: 'Scapular Retractions', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Chin Tucks', sets: '3', reps: '10', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'Medium',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_EAR, R_EAR);
+      const ear = side === 'right' ? R_EAR : L_EAR;
+      if (!vis(lm, NOSE) || !vis(lm, ear)) return notVisible([NOSE, ear]);
+      // Looking up lifts the nose above the ear — measure how far the ear→nose
+      // line rises above the horizontal.
+      const dx = Math.abs(lm[NOSE].x - lm[ear].x) || 1e-6;
+      const dy = lm[ear].y - lm[NOSE].y; // + when nose is higher than ear
+      const angle = Math.round(Math.max(0, deg(Math.atan2(dy, dx))));
+      const severity: Severity = angle >= 40 ? 'normal' : angle >= 25 ? 'mild' : angle >= 10 ? 'moderate' : 'severe';
+      return { value: angle, severity, points: [NOSE, ear], detail: `${angle}°` };
+    },
+  },
+
+  // ---------------- Upper limb ----------------
+  {
+    id: 'shoulder_extension_rom',
+    name: 'Shoulder Extension ROM (Arm Back)',
+    nameHi: 'कंधे का पीछे मूवमेंट',
+    bodyRegion: 'Shoulder',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways, keep your arm straight and swing it backward behind you as far as you can.',
+    instructionHi: 'बगल से खड़े हों, बांह सीधी रखें और जितना हो सके पीछे की ओर ले जाएं।',
+    complaints: ['Shoulder stiffness', "Can't reach behind back", 'Frozen shoulder'],
+    landmarkNames: ['Hip', 'Shoulder', 'Wrist'],
+    measurementName: 'Shoulder Extension Angle',
+    unit: '°',
+    ranges: { normal: '≥ 50°', mild: '35–50°', moderate: '15–35°', severe: '< 15°' },
+    painArea: 'Shoulder',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Doorway Shoulder Stretch', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Prone Arm Lifts', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Band Pull-Backs', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_WRI, R_WRI);
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const wri = side === 'right' ? R_WRI : L_WRI;
+      if (!vis(lm, hip) || !vis(lm, sho) || !vis(lm, wri)) return notVisible([sho, wri]);
+      const angle = Math.round(calculateAngle2D(lm[hip], lm[sho], lm[wri]));
+      const severity: Severity = angle >= 50 ? 'normal' : angle >= 35 ? 'mild' : angle >= 15 ? 'moderate' : 'severe';
+      return { value: angle, severity, points: [sho, wri], detail: `${angle}°` };
+    },
+  },
+
+  // ---------------- Lower limb ----------------
+  {
+    id: 'hip_flexion_rom',
+    name: 'Hip Flexion ROM (Knee Raise)',
+    nameHi: 'कूल्हे का आगे मूवमेंट',
+    bodyRegion: 'Hip',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways and lift one knee up toward your chest as high as you comfortably can.',
+    instructionHi: 'बगल से खड़े हों और एक घुटना छाती की ओर जितना ऊपर हो सके उठाएं।',
+    complaints: ['Hip stiffness', 'Difficulty lifting knee', 'Hip pain'],
+    landmarkNames: ['Shoulder', 'Hip', 'Knee'],
+    measurementName: 'Hip Flexion Angle',
+    unit: '°',
+    ranges: { normal: '≥ 90°', mild: '60–90°', moderate: '30–60°', severe: '< 30°' },
+    painArea: 'Hip',
+    painCorrelation: 'Strong',
+    exercises: [
+      { name: 'Standing Knee Raises', sets: '3', reps: '12 each side', frequency: 'Daily' },
+      { name: 'Hip Flexor Activation', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Marching in Place', sets: '3', reps: '20', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_KNEE, R_KNEE);
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const knee = side === 'right' ? R_KNEE : L_KNEE;
+      if (!vis(lm, sho) || !vis(lm, hip) || !vis(lm, knee)) return notVisible([hip, knee]);
+      // Raising the knee bends the trunk→thigh line away from straight (180°).
+      const flex = Math.round(180 - calculateAngle2D(lm[sho], lm[hip], lm[knee]));
+      const severity: Severity = flex >= 90 ? 'normal' : flex >= 60 ? 'mild' : flex >= 30 ? 'moderate' : 'severe';
+      return { value: flex, severity, points: [hip, knee], detail: `${flex}°` };
+    },
+  },
+  {
+    id: 'knee_flexion_active',
+    name: 'Active Knee Flexion (Heel to Buttock)',
+    nameHi: 'घुटना सक्रिय मोड़',
+    bodyRegion: 'Knee',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways and bend one knee, bringing your heel up toward your buttock.',
+    instructionHi: 'बगल से खड़े हों और एक घुटना मोड़कर एड़ी को कूल्हे की ओर ऊपर लाएं।',
+    complaints: ['Knee stiffness', "Can't bend knee fully", 'Post-injury limitation'],
+    landmarkNames: ['Hip', 'Knee', 'Ankle'],
+    measurementName: 'Knee Flexion',
+    unit: '°',
+    ranges: { normal: '≥ 120°', mild: '90–120°', moderate: '45–90°', severe: '< 45°' },
+    painArea: 'Knee',
+    painCorrelation: 'Strong',
+    exercises: [
+      { name: 'Prone Knee Bends', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Heel Slides', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Standing Hamstring Curl', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_KNEE, R_KNEE);
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const knee = side === 'right' ? R_KNEE : L_KNEE;
+      const ank = side === 'right' ? R_ANK : L_ANK;
+      if (!vis(lm, hip) || !vis(lm, knee) || !vis(lm, ank)) return notVisible([hip, knee, ank]);
+      const flex = Math.round(180 - calculateAngle2D(lm[hip], lm[knee], lm[ank]));
+      const severity: Severity = flex >= 120 ? 'normal' : flex >= 90 ? 'mild' : flex >= 45 ? 'moderate' : 'severe';
+      return { value: flex, severity, points: [hip, knee, ank], detail: `${flex}°` };
+    },
+  },
+  {
+    id: 'lunge_depth',
+    name: 'Forward Lunge Depth',
+    nameHi: 'लंज गहराई',
+    bodyRegion: 'Knee',
+    category: 'Functional Movement',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways and step one foot forward into a lunge, lowering until the front knee is bent.',
+    instructionHi: 'बगल से खड़े हों और एक पैर आगे रखकर लंज में नीचे जाएं, जब तक आगे का घुटना मुड़ न जाए।',
+    complaints: ['Leg weakness', 'Knee instability', 'Difficulty with stairs'],
+    landmarkNames: ['Hip', 'Knee', 'Ankle'],
+    measurementName: 'Front Knee Flexion',
+    unit: '°',
+    ranges: { normal: '≥ 80°', mild: '50–80°', moderate: '25–50°', severe: '< 25°' },
+    painArea: 'Knee',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Static Lunges', sets: '3', reps: '10 each side', frequency: 'Daily' },
+      { name: 'Split Squats', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Step-Ups', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Clinical Experience',
+    measure: (lm) => {
+      const side = betterSide(lm, L_KNEE, R_KNEE);
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const knee = side === 'right' ? R_KNEE : L_KNEE;
+      const ank = side === 'right' ? R_ANK : L_ANK;
+      if (!vis(lm, hip) || !vis(lm, knee) || !vis(lm, ank)) return notVisible([hip, knee, ank]);
+      const flex = Math.round(180 - calculateAngle2D(lm[hip], lm[knee], lm[ank]));
+      const severity: Severity = flex >= 80 ? 'normal' : flex >= 50 ? 'mild' : flex >= 25 ? 'moderate' : 'severe';
+      return { value: flex, severity, points: [hip, knee, ank], detail: `${flex}°` };
+    },
+  },
+  {
+    id: 'ankle_dorsiflexion',
+    name: 'Ankle Dorsiflexion (Knee to Wall)',
+    nameHi: 'टखने का ऊपर मूवमेंट',
+    bodyRegion: 'Ankle',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways and bend your knee forward over your toes, keeping your heel down.',
+    instructionHi: 'बगल से खड़े हों और एड़ी ज़मीन पर रखते हुए घुटना पंजों के ऊपर आगे मोड़ें।',
+    complaints: ['Tight calves', 'Ankle stiffness', 'Difficulty squatting'],
+    landmarkNames: ['Knee', 'Ankle', 'Foot'],
+    measurementName: 'Ankle Angle',
+    unit: '°',
+    ranges: { normal: '≤ 80°', mild: '80–95°', moderate: '95–110°', severe: '> 110°' },
+    painArea: 'Ankle',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Calf Stretch (Wall)', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Knee-to-Wall Mobilization', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Eccentric Heel Drops', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'Medium',
+    source: 'Physiopedia',
+    measure: (lm) => {
+      const side = betterSide(lm, L_ANK, R_ANK);
+      const knee = side === 'right' ? R_KNEE : L_KNEE;
+      const ank = side === 'right' ? R_ANK : L_ANK;
+      const foot = side === 'right' ? R_FOOT : L_FOOT;
+      if (!vis(lm, knee) || !vis(lm, ank) || !vis(lm, foot)) return notVisible([knee, ank, foot]);
+      // Smaller knee→ankle→foot angle = more dorsiflexion (better mobility).
+      const angle = Math.round(calculateAngle2D(lm[knee], lm[ank], lm[foot]));
+      const severity: Severity = angle <= 80 ? 'normal' : angle <= 95 ? 'mild' : angle <= 110 ? 'moderate' : 'severe';
+      return { value: angle, severity, points: [knee, ank, foot], detail: `${angle}°` };
+    },
+  },
+  {
+    id: 'single_leg_balance',
+    name: 'Single-Leg Stance (Pelvic Drop)',
+    nameHi: 'एक पैर पर संतुलन',
+    bodyRegion: 'Hip',
+    category: 'Functional Movement',
+    view: 'front',
+    patientPosition: 'Standing',
+    instruction: 'Face the camera and stand on one leg, lifting the other foot off the floor. Hold steady.',
+    instructionHi: 'कैमरे की ओर मुंह करें और एक पैर पर खड़े हों, दूसरा पैर ज़मीन से ऊपर उठाएं। स्थिर रहें।',
+    complaints: ['Balance problems', 'Weak hips', 'Hip drop when walking'],
+    landmarkNames: ['Left Hip', 'Right Hip', 'Horizontal Reference'],
+    measurementName: 'Pelvic Drop',
+    unit: '°',
+    ranges: { normal: '0–3°', mild: '3–6°', moderate: '6–10°', severe: '> 10°' },
+    painArea: 'Hip',
+    painCorrelation: 'Strong',
+    exercises: [
+      { name: 'Single-Leg Balance Hold', sets: '3', reps: '30 sec each', frequency: 'Daily' },
+      { name: 'Hip Hikes', sets: '3', reps: '12 each side', frequency: 'Daily' },
+      { name: 'Side-Lying Leg Raises', sets: '3', reps: '15', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Physiopedia',
+    measure: (lm) => {
+      if (!vis(lm, L_HIP) || !vis(lm, R_HIP)) return notVisible([L_HIP, R_HIP]);
+      // A weak stance hip lets the opposite side of the pelvis drop (Trendelenburg).
+      const drop = Math.round(tiltFromHorizontal(lm, L_HIP, R_HIP));
+      const severity: Severity = drop <= 3 ? 'normal' : drop <= 6 ? 'mild' : drop <= 10 ? 'moderate' : 'severe';
+      return { value: drop, severity, points: [L_HIP, R_HIP], detail: `${drop}°` };
+    },
+  },
+  {
+    id: 'overhead_squat',
+    name: 'Overhead Squat (Knee Control)',
+    nameHi: 'ओवरहेड स्क्वाट',
+    bodyRegion: 'Knee',
+    category: 'Functional Movement',
+    view: 'front',
+    patientPosition: 'Standing',
+    instruction: 'Face the camera, raise both arms overhead, and squat down keeping knees over your toes.',
+    instructionHi: 'कैमरे की ओर मुंह करें, दोनों हाथ ऊपर उठाएं, और घुटनों को पंजों के ऊपर रखते हुए नीचे बैठें।',
+    complaints: ['Knees cave in', 'Poor squat form', 'Knee pain with squatting'],
+    landmarkNames: ['Hip', 'Knee', 'Ankle'],
+    measurementName: 'Knee Valgus Deviation',
+    unit: '°',
+    ranges: { normal: '0–5°', mild: '5–10°', moderate: '10–20°', severe: '> 20°' },
+    painArea: 'Knee',
+    painCorrelation: 'Strong',
+    exercises: [
+      { name: 'Goblet Squats', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Banded Squats', sets: '3', reps: '12', frequency: 'Daily' },
+      { name: 'Lateral Band Walks', sets: '3', reps: '10 steps', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'NASM',
+    measure: (lm) => {
+      const evalLeg = (hip: number, knee: number, ankle: number): number | null => {
+        if (!vis(lm, hip) || !vis(lm, knee) || !vis(lm, ankle)) return null;
+        // Horizontal drift of the knee off the hip→ankle line = valgus/varus.
+        return tiltFromVertical(lm[hip].x, lm[hip].y, lm[ankle].x, lm[ankle].y) === 0
+          ? 0
+          : Math.abs(tiltFromVertical(lm[hip].x, lm[hip].y, lm[knee].x, lm[knee].y) - tiltFromVertical(lm[knee].x, lm[knee].y, lm[ankle].x, lm[ankle].y));
+      };
+      const left = evalLeg(L_HIP, L_KNEE, L_ANK);
+      const right = evalLeg(R_HIP, R_KNEE, R_ANK);
+      if (left === null && right === null) return notVisible([L_KNEE, R_KNEE]);
+      const dev = Math.round(Math.max(left ?? 0, right ?? 0));
+      const severity: Severity = dev <= 5 ? 'normal' : dev <= 10 ? 'mild' : dev <= 20 ? 'moderate' : 'severe';
+      return { value: dev, severity, points: [L_KNEE, R_KNEE], detail: `${dev}°` };
+    },
+  },
+  {
+    id: 'trunk_extension',
+    name: 'Standing Back Extension',
+    nameHi: 'धड़ का पीछे झुकाव',
+    bodyRegion: 'Spine',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Standing',
+    instruction: 'Stand sideways, place hands on your lower back, and lean your trunk backward gently.',
+    instructionHi: 'बगल से खड़े हों, हाथ पीठ के निचले हिस्से पर रखें, और धड़ को धीरे से पीछे झुकाएं।',
+    complaints: ['Stiff lower back', 'Back pain when standing', 'Reduced extension'],
+    landmarkNames: ['Shoulder', 'Hip', 'Vertical Reference'],
+    measurementName: 'Back Extension Angle',
+    unit: '°',
+    ranges: { normal: '≥ 25°', mild: '15–25°', moderate: '5–15°', severe: '< 5°' },
+    painArea: 'Lower Back',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Standing Back Extension', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Prone Press-Ups (Cobra)', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Hip Flexor Stretch', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'Medium',
+    source: 'Clinical Experience',
+    measure: (lm) => {
+      const side = betterSide(lm, L_HIP, R_HIP);
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      if (!vis(lm, sho) || !vis(lm, hip)) return notVisible([sho, hip]);
+      const angle = Math.round(tiltFromVertical(lm[sho].x, lm[sho].y, lm[hip].x, lm[hip].y));
+      const severity: Severity = angle >= 25 ? 'normal' : angle >= 15 ? 'mild' : angle >= 5 ? 'moderate' : 'severe';
+      return { value: angle, severity, points: [sho, hip], detail: `${angle}°` };
+    },
+  },
 ];
 
 export function getAssessment(id: string): ClinicalAssessment | undefined {
@@ -904,4 +1269,14 @@ export const ASSESSMENT_GAUGE: Record<string, GaugeConfig> = {
   elbow_flexion_rom:      { min: 0, max: 150, ideal: 145, idealLabel: '≥ 130°', stops: [60, 100, 130], lowerIsBetter: false },
   trunk_forward_flexion:  { min: 0, max: 90, ideal: 80, idealLabel: '≥ 70°', stops: [20, 45, 70], lowerIsBetter: false },
   trunk_lateral_flexion:  { min: 0, max: 40, ideal: 30, idealLabel: '≥ 25°', stops: [5, 15, 25], lowerIsBetter: false },
+  cervical_flexion:       { min: 0, max: 70, ideal: 60, idealLabel: '≥ 45°', stops: [15, 30, 45], lowerIsBetter: false },
+  cervical_extension:     { min: 0, max: 60, ideal: 55, idealLabel: '≥ 40°', stops: [10, 25, 40], lowerIsBetter: false },
+  shoulder_extension_rom: { min: 0, max: 70, ideal: 60, idealLabel: '≥ 50°', stops: [15, 35, 50], lowerIsBetter: false },
+  hip_flexion_rom:        { min: 0, max: 120, ideal: 110, idealLabel: '≥ 90°', stops: [30, 60, 90], lowerIsBetter: false },
+  knee_flexion_active:    { min: 0, max: 140, ideal: 135, idealLabel: '≥ 120°', stops: [45, 90, 120], lowerIsBetter: false },
+  lunge_depth:            { min: 0, max: 120, ideal: 95, idealLabel: '≥ 80°', stops: [25, 50, 80], lowerIsBetter: false },
+  ankle_dorsiflexion:     { min: 60, max: 130, ideal: 70, idealLabel: '≤ 80°', stops: [80, 95, 110], lowerIsBetter: true },
+  single_leg_balance:     { min: 0, max: 15, ideal: 0, idealLabel: '0°', stops: [3, 6, 10], lowerIsBetter: true },
+  overhead_squat:         { min: 0, max: 30, ideal: 0, idealLabel: '0°', stops: [5, 10, 20], lowerIsBetter: true },
+  trunk_extension:        { min: 0, max: 40, ideal: 30, idealLabel: '≥ 25°', stops: [5, 15, 25], lowerIsBetter: false },
 };
