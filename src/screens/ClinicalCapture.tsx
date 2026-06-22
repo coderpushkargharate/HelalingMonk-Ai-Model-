@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { initializePoseLandmarker, detectPose, Landmark } from '../lib/poseDetection';
 import { computePostureChain, PostureChain } from '../lib/postureVisualizer';
+import { computeClinicalPlumbLine, drawClinicalPlumbLine } from '../lib/plumbLine';
 import {
   ClinicalAssessment,
   AssessmentCapture,
@@ -128,7 +129,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           setLive(measure);
           const chain = computePostureChain(result.landmarks, (video.videoWidth / video.videoHeight) || 16 / 9);
           setLivePosture(chain);
-          drawScene(canvas, video, result.landmarks, measure, chain);
+          drawScene(canvas, video, result.landmarks, measure);
         } else {
           latestLandmarks.current = null;
           setBodyDetected(false);
@@ -157,8 +158,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     canvas: HTMLCanvasElement,
     video: HTMLVideoElement,
     lm: Landmark[],
-    measure: MeasureResult,
-    chain: PostureChain | null
+    measure: MeasureResult
   ) => {
     const w = video.videoWidth;
     const h = video.videoHeight;
@@ -168,32 +168,11 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
 
-    // Vertical "ideal" alignment line — a green dashed plumb dropped through the
-    // ankle midpoint, drawn first so the skeleton, dots and posture line sit on
-    // top. Baked into the captured snapshot, so it appears on the report image.
-    const refX = chain ? chain.lineX * w : null;
-    if (refX !== null) {
-      ctx.save();
-      ctx.setLineDash([10, 8]);
-      ctx.strokeStyle = '#22c55e';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(refX, 0);
-      ctx.lineTo(refX, h);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // "IDEAL" tag at the top of the line.
-      ctx.font = 'bold 18px Arial';
-      ctx.textBaseline = 'top';
-      const tag = 'IDEAL';
-      const tw = ctx.measureText(tag).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(refX - tw / 2 - 6, 10, tw + 12, 26);
-      ctx.fillStyle = '#22c55e';
-      ctx.fillText(tag, refX - tw / 2, 14);
-      ctx.restore();
-    }
+    // Clinical plumb line for the current view (front midline / back midline /
+    // lateral sagittal). Drawn after the skeleton & dots so its labels stay
+    // legible; computed here so the skeleton highlight can reference its axis.
+    const aspect = (w / h) || 16 / 9;
+    const plumb = computeClinicalPlumbLine(lm, currentRef.current.view, aspect);
 
     const active = new Set(measure.points);
     const sevColor = measure.severity ? SEVERITY_COLOR[measure.severity] : '#9ca3af';
@@ -236,56 +215,23 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       ctx.stroke();
     }
 
-    // Actual posture line (ear → shoulder → hip → knee → ankle) plus per-joint
-    // angle labels off the ideal plumb, and the aggregate deviation score.
-    if (chain && refX !== null) {
-      const chainColor = SEVERITY_COLOR[chain.rating];
+    // Clinical plumb line: the vertical reference plus the anatomical
+    // checkpoints it should pass through, and (front view) the left/right
+    // symmetry bars. Drawn here so its labels sit on top of the skeleton.
+    if (plumb) {
+      drawClinicalPlumbLine(ctx, plumb, w, h);
 
-      // Posture line through the chain joints, coloured by overall deviation,
-      // with a white halo so it reads clearly over the cyan skeleton.
-      const pts = chain.joints.map((j) => ({ x: j.x * w, y: j.y * h }));
-      if (pts.length >= 2) {
-        ctx.save();
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 9;
-        ctx.beginPath();
-        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        ctx.stroke();
-        ctx.strokeStyle = chainColor;
-        ctx.lineWidth = 5;
-        ctx.beginPath();
-        pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Per-joint labels (Ear / Shoulder / Hip / Knee / Ankle) with the angle off
-      // the ideal line; green within tolerance, red when deviated.
-      ctx.font = 'bold 16px Arial';
-      ctx.textBaseline = 'middle';
-      for (const j of chain.joints) {
-        const jx = j.x * w;
-        const jy = j.y * h;
-        const label = j.isBase ? `${j.name} (base)` : `${j.name} ${j.angle.toFixed(0)}°`;
-        const dir = jx >= refX ? 1 : -1;
-        const tw = ctx.measureText(label).width;
-        const lx = dir > 0 ? jx + 12 : jx - 12 - tw;
-        ctx.fillStyle = 'rgba(0,0,0,0.62)';
-        ctx.fillRect(lx - 4, jy - 11, tw + 8, 22);
-        ctx.fillStyle = j.isBase ? '#e2e8f0' : j.aligned ? '#22c55e' : '#ff5252';
-        ctx.fillText(label, lx, jy);
-      }
-
-      // Aggregate deviation-from-ideal score, top-centre.
-      const summary = `Deviation from ideal: ${chain.score.toFixed(0)}° · ${SEVERITY_LABEL[chain.rating]}`;
+      // Aggregate alignment summary, top-centre.
+      const summary = plumb.aligned
+        ? 'Plumb line: aligned'
+        : `Plumb deviation: ${plumb.score.toFixed(1)}% · ${SEVERITY_LABEL[plumb.rating]}`;
       ctx.font = 'bold 18px Arial';
       ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
       const sw = ctx.measureText(summary).width;
       ctx.fillStyle = 'rgba(0,0,0,0.65)';
       ctx.fillRect(w / 2 - sw / 2 - 8, 44, sw + 16, 28);
-      ctx.fillStyle = chainColor;
+      ctx.fillStyle = SEVERITY_COLOR[plumb.rating];
       ctx.fillText(summary, w / 2 - sw / 2, 49);
     }
 

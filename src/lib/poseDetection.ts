@@ -1,6 +1,13 @@
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import { PoseSmoother } from './poseSmoothing';
 
 let poseLandmarker: PoseLandmarker | null = null;
+
+// The "full" model is markedly more accurate than "lite" (better limb tracking
+// and depth) while still running in real time with the GPU delegate. Swap to
+// `_heavy` for maximum precision on powerful devices, or `_lite` to fall back.
+const MODEL_URL =
+  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task';
 
 export async function initializePoseLandmarker() {
   if (poseLandmarker) return poseLandmarker;
@@ -9,15 +16,33 @@ export async function initializePoseLandmarker() {
     'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
   );
 
-  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
-    },
-    runningMode: 'VIDEO',
-    numPoses: 1,
-  });
+  try {
+    poseLandmarker = await createLandmarker(vision, 'GPU');
+  } catch (err) {
+    // Some devices/browsers lack a usable WebGL context; CPU still works.
+    console.warn('GPU pose delegate unavailable, falling back to CPU.', err);
+    poseLandmarker = await createLandmarker(vision, 'CPU');
+  }
 
   return poseLandmarker;
+}
+
+function createLandmarker(
+  vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>,
+  delegate: 'GPU' | 'CPU'
+) {
+  return PoseLandmarker.createFromOptions(vision, {
+    baseOptions: { modelAssetPath: MODEL_URL, delegate },
+    runningMode: 'VIDEO',
+    numPoses: 1,
+    // Tighter thresholds keep only confident detections, which steadies the
+    // clinical measurements; tracking confidence stays moderate so a briefly
+    // occluded limb is not dropped mid-capture.
+    minPoseDetectionConfidence: 0.6,
+    minPosePresenceConfidence: 0.6,
+    minTrackingConfidence: 0.6,
+    outputSegmentationMasks: false,
+  });
 }
 
 const LANDMARK_NAMES = [
@@ -113,6 +138,16 @@ export interface PoseResult {
 // silently kills landmark detection. A monotonic counter avoids that.
 let lastTimestamp = 0;
 
+// One-Euro smoother shared by the live loop. Removes per-frame jitter so the
+// skeleton overlay and the clinical angles stay rock-steady when the patient
+// holds still, without lagging behind real movement.
+const smoother = new PoseSmoother();
+
+/** Call when the body leaves the frame so re-acquisition doesn't snap/glide. */
+export function resetPoseSmoothing() {
+  smoother.reset();
+}
+
 export async function detectPose(videoElement: HTMLVideoElement): Promise<PoseResult | null> {
   if (!poseLandmarker) return null;
 
@@ -121,10 +156,12 @@ export async function detectPose(videoElement: HTMLVideoElement): Promise<PoseRe
     const result = poseLandmarker.detectForVideo(videoElement, lastTimestamp);
     if (result.landmarks && result.landmarks.length > 0) {
       return {
-        landmarks: result.landmarks[0],
+        landmarks: smoother.smooth(result.landmarks[0], lastTimestamp),
         worldLandmarks: result.worldLandmarks?.[0] || [],
       };
     }
+    // No body this frame — reset so the next detection starts clean.
+    smoother.reset();
   } catch (error) {
     console.error('Pose detection error:', error);
   }
