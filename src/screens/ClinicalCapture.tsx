@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { openCamera } from '../lib/camera';
 import { initializePoseLandmarker, detectPose, Landmark } from '../lib/poseDetection';
 import { computePostureChain, PostureChain } from '../lib/postureVisualizer';
 import { computeClinicalPlumbLine, drawClinicalPlumbLine } from '../lib/plumbLine';
@@ -59,9 +60,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   // first so switching front↔back never leaves a second camera running.
   const startStream = async (mode: 'user' | 'environment') => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } },
-    });
+    const stream = await openCamera(mode);
     streamRef.current = stream;
     const video = videoRef.current;
     if (!video) return;
@@ -334,16 +333,8 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
         style={{ opacity: flash ? 0.85 : 0 }}
       />
 
-      {/* Body detection indicator + camera flip */}
+      {/* Body detection indicator */}
       <div className="absolute top-24 right-4 z-20 flex items-center gap-2">
-        <button
-          onClick={flipCamera}
-          title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
-          className="bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
-        >
-          <SwitchCamera className="w-4 h-4" />
-          {facingMode === 'user' ? 'Front' : 'Back'}
-        </button>
         <span
           className={`text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 ${
             bodyDetected ? 'bg-green-600 text-white' : 'bg-black/60 text-gray-300'
@@ -353,6 +344,17 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           {bodyDetected ? 'Body detected · points live' : 'Stand in frame...'}
         </span>
       </div>
+
+      {/* Front/back camera toggle — floats in the clear right-middle area so it
+          never sits under the top-bar text and stays easy to tap. */}
+      <button
+        onClick={flipCamera}
+        title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+        className="absolute top-1/2 -translate-y-1/2 right-3 z-30 bg-black/70 hover:bg-black/90 active:scale-95 text-white text-sm font-semibold pl-3 pr-4 py-3 rounded-full flex items-center gap-2 shadow-lg"
+      >
+        <SwitchCamera className="w-5 h-5" />
+        {facingMode === 'user' ? 'Front' : 'Back'}
+      </button>
 
       {/* Top bar: current assessment + instruction */}
       <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/85 to-transparent p-4 z-20">

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { openCamera } from '../lib/camera';
 import { initializePoseLandmarker, detectPose, drawPoseSkeleton } from '../lib/poseDetection';
 import { analyzePosture } from '../lib/poseAnalyzer';
 import { PAIN_AREAS, PosePosition, CapturedImage } from '../lib/painAssessment';
@@ -32,9 +33,7 @@ export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip
   // first so switching front↔back never leaves a second camera running.
   const startStream = async (mode: 'user' | 'environment', onFirstReady?: () => void) => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: mode, width: { ideal: 1280 }, height: { ideal: 720 } }
-    });
+    const stream = await openCamera(mode);
     streamRef.current = stream;
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
@@ -277,13 +276,14 @@ export default function MultiPositionCapture({ selectedAreas, onComplete, onSkip
         className="absolute inset-0 w-full h-full"
       />
 
-      {/* Front/back camera toggle */}
+      {/* Front/back camera toggle — floats in the clear right-middle area so it
+          never sits under the top-bar text and stays easy to tap. */}
       <button
         onClick={flipCamera}
         title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
-        className="absolute top-4 right-4 z-30 bg-black/60 hover:bg-black/80 text-white text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
+        className="absolute top-1/2 -translate-y-1/2 right-3 z-30 bg-black/70 hover:bg-black/90 active:scale-95 text-white text-sm font-semibold pl-3 pr-4 py-3 rounded-full flex items-center gap-2 shadow-lg"
       >
-        <SwitchCamera className="w-4 h-4" />
+        <SwitchCamera className="w-5 h-5" />
         {facingMode === 'user' ? 'Front' : 'Back'}
       </button>
 
