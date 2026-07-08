@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { CLINICAL_ASSESSMENTS } from '../lib/clinicalKnowledge';
+import { initializePoseLandmarker } from '../lib/poseDetection';
 import PoseIllustration from '../components/PoseIllustration';
 import Landmark33Diagram from '../components/Landmark33Diagram';
 import { CheckCircle2, ChevronLeft, AlertCircle, Activity } from 'lucide-react';
@@ -14,6 +15,15 @@ export default function PositionSelect({ initial, onBack, onStart }: Props) {
   const defaults = CLINICAL_ASSESSMENTS.filter((a) => a.defaultSelected).map((a) => a.id);
   const [selected, setSelected] = useState<string[]>(initial?.length ? initial : defaults);
   const [error, setError] = useState('');
+
+  // Warm up the (multi-MB) pose model now, while the doctor is picking positions,
+  // so it's already downloaded and initialised by the time the capture screen
+  // opens — the camera then starts tracking instantly instead of after a wait.
+  useEffect(() => {
+    initializePoseLandmarker().catch(() => {
+      /* Non-fatal here; the capture screen retries and surfaces any error. */
+    });
+  }, []);
 
   const toggle = (id: string) => {
     setError('');

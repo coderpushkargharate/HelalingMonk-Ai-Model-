@@ -109,11 +109,23 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
 
   useEffect(() => {
     const setup = async () => {
+      // Open the camera FIRST so the live preview appears instantly, then load
+      // the (multi-MB) pose model in parallel. The render loop safely returns no
+      // landmarks until the model is ready, so tracking simply switches on the
+      // moment the download finishes — the doctor never waits on a black screen.
       try {
-        await initializePoseLandmarker();
         await startStream('user');
       } catch (err) {
         setStatus('Camera setup failed. Please allow camera access.');
+        console.error(err);
+        return;
+      }
+      try {
+        setStatus('Loading pose model...');
+        await initializePoseLandmarker();
+        setStatus('Tracking...');
+      } catch (err) {
+        setStatus('Pose model failed to load. Check your connection.');
         console.error(err);
       }
     };

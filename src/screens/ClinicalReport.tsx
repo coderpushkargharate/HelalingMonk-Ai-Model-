@@ -254,13 +254,16 @@ function FindingCard({
         {/* Left: user's captured photo (ideal line + joint angles baked in) · Right: ideal-position reference */}
         <div className="grid grid-cols-2 md:w-[28rem] flex-shrink-0">
           <figure className="relative">
+            {/* Patient photo WITH the AI pose overlay (dots + skeleton + plumb line)
+                baked in, so the doctor sees exactly what the model measured. Falls
+                back to the raw frame only if the overlay snapshot is missing. */}
             <img
-              src={capture.rawImageData || capture.imageData}
-              alt={`${assessment.name} — patient photo`}
+              src={capture.imageData || capture.rawImageData}
+              alt={`${assessment.name} — patient photo with AI pose points`}
               className="w-full h-44 object-cover bg-gray-900"
             />
             <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/60 text-white px-1.5 py-0.5 rounded">
-              Patient Photo
+              Patient Photo · AI points
             </figcaption>
           </figure>
           <figure className="relative border-l border-gray-200 bg-slate-50 flex items-center justify-center">

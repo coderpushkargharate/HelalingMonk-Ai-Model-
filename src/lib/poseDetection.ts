@@ -12,8 +12,11 @@ const MODEL_URL =
 export async function initializePoseLandmarker() {
   if (poseLandmarker) return poseLandmarker;
 
+  // Pin the WASM build to the exact installed @mediapipe/tasks-vision version.
+  // Using `@latest` can pull a WASM runtime newer than the bundled JS API, which
+  // silently breaks landmark detection on some days — unacceptable for clinic use.
   const vision = await FilesetResolver.forVisionTasks(
-    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
   );
 
   try {
