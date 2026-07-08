@@ -268,8 +268,14 @@ function FindingCard({
           </figure>
           <figure className="relative border-l border-gray-200 bg-slate-50 flex items-center justify-center">
             <PoseIllustration pose={assessment.id} className="w-full h-44" />
+            {/* Ideal plumb reference — the target vertical the patient's line
+                (drawn on the left photo) should match. */}
+            <span
+              className="absolute top-2 bottom-2 left-1/2 -translate-x-1/2 border-l-2 border-dashed border-green-500 pointer-events-none"
+              aria-hidden
+            />
             <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-green-700 text-white px-1.5 py-0.5 rounded">
-              Ideal Position
+              Ideal Position · plumb
             </figcaption>
           </figure>
         </div>
@@ -290,6 +296,22 @@ function FindingCard({
               </span>
             )}
           </div>
+
+          {/* Plumb-line verdict: whether the captured standing position is correct.
+              The vertical reference is drawn on the patient photo on the left. */}
+          {capture.plumbLine && (
+            <div
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded"
+              style={{
+                backgroundColor: capture.plumbLine.aligned ? '#dcfce7' : '#fee2e2',
+                color: capture.plumbLine.aligned ? '#166534' : '#991b1b',
+              }}
+            >
+              {capture.plumbLine.aligned
+                ? '✓ Plumb line: position correct'
+                : `✗ Plumb line: needs adjustment · ${capture.plumbLine.score.toFixed(0)}% off`}
+            </div>
+          )}
 
           {/* Ideal vs Your value */}
           <div className="flex items-end gap-6 mt-3">

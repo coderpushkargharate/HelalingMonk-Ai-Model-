@@ -79,6 +79,20 @@ export interface CapturedPostureDeviation {
   joints: { name: string; angle: number; aligned: boolean }[];
 }
 
+/** Clinical plumb-line alignment captured at snapshot time. This is the
+ *  reference vertical the physio drops through the body; whether the anatomical
+ *  checkpoints sit on it decides if the standing position is correct. */
+export interface CapturedPlumbLine {
+  view: View;
+  /** Mean absolute deviation of the checkpoints, % of body height. */
+  score: number;
+  rating: Severity;
+  /** true = every checkpoint on the line and every L/R pair level → position correct. */
+  aligned: boolean;
+  points: { name: string; offsetPct: number; onLine: boolean }[];
+  symmetry: { name: string; tiltDeg: number; level: boolean; higher: 'left' | 'right' | 'even' }[];
+}
+
 export interface AssessmentCapture {
   assessmentId: string;
   value: number | null;
@@ -87,6 +101,8 @@ export interface AssessmentCapture {
   rawImageData?: string; // base64 snapshot of the original frame (no overlay)
   /** Posture-chain deviation from ideal at capture time (side/full-body views). */
   postureDeviation?: CapturedPostureDeviation;
+  /** Plumb-line alignment at capture time — drives the position correct/incorrect verdict. */
+  plumbLine?: CapturedPlumbLine;
   timestamp: number;
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { openCamera } from '../lib/camera';
 import { initializePoseLandmarker, detectPose, Landmark } from '../lib/poseDetection';
 import { computePostureChain, PostureChain } from '../lib/postureVisualizer';
-import { computeClinicalPlumbLine, drawClinicalPlumbLine } from '../lib/plumbLine';
+import { computeClinicalPlumbLine, drawClinicalPlumbLine, ClinicalPlumbLine } from '../lib/plumbLine';
 import {
   ClinicalAssessment,
   AssessmentCapture,
@@ -48,6 +48,9 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const latestLandmarks = useRef<Landmark[] | null>(null);
+  // Latest plumb-line result for the frame on screen, so a capture stores the
+  // exact alignment the doctor saw (and the live verdict can read it).
+  const latestPlumb = useRef<ClinicalPlumbLine | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const [index, setIndex] = useState(0);
@@ -57,6 +60,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const [status, setStatus] = useState('Loading pose model...');
   const [live, setLive] = useState<MeasureResult | null>(null);
   const [livePosture, setLivePosture] = useState<PostureChain | null>(null);
+  const [livePlumb, setLivePlumb] = useState<ClinicalPlumbLine | null>(null);
   const [bodyDetected, setBodyDetected] = useState(false);
   const [flash, setFlash] = useState(false);
   const [captures, setCaptures] = useState<Record<string, AssessmentCapture>>({});
@@ -147,17 +151,23 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
         if (result?.landmarks && result.landmarks.length > 0) {
           latestLandmarks.current = result.landmarks;
           setBodyDetected(true);
+          const aspect = (video.videoWidth / video.videoHeight) || 16 / 9;
           const measure = currentRef.current.measure(result.landmarks);
           setLive(measure);
-          const chain = computePostureChain(result.landmarks, (video.videoWidth / video.videoHeight) || 16 / 9);
+          const chain = computePostureChain(result.landmarks, aspect);
           setLivePosture(chain);
-          drawScene(canvas, video, result.landmarks, measure);
+          const plumb = computeClinicalPlumbLine(result.landmarks, currentRef.current.view, aspect);
+          latestPlumb.current = plumb;
+          setLivePlumb(plumb);
+          drawScene(canvas, video, result.landmarks, measure, plumb);
         } else {
           latestLandmarks.current = null;
+          latestPlumb.current = null;
           setBodyDetected(false);
           clearCanvas(canvas, video);
           setLive(null);
           setLivePosture(null);
+          setLivePlumb(null);
         }
       }
     } catch (err) {
@@ -180,7 +190,8 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     canvas: HTMLCanvasElement,
     video: HTMLVideoElement,
     lm: Landmark[],
-    measure: MeasureResult
+    measure: MeasureResult,
+    plumb: ClinicalPlumbLine | null
   ) => {
     const w = video.videoWidth;
     const h = video.videoHeight;
@@ -189,12 +200,6 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
-
-    // Clinical plumb line for the current view (front midline / back midline /
-    // lateral sagittal). Drawn after the skeleton & dots so its labels stay
-    // legible; computed here so the skeleton highlight can reference its axis.
-    const aspect = (w / h) || 16 / 9;
-    const plumb = computeClinicalPlumbLine(lm, currentRef.current.view, aspect);
 
     const active = new Set(measure.points);
     const sevColor = measure.severity ? SEVERITY_COLOR[measure.severity] : '#9ca3af';
@@ -302,9 +307,10 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     const measure = lm
       ? current.measure(lm)
       : { value: null, severity: null, points: [], detail: 'N/A' };
-    const chain = lm
-      ? computePostureChain(lm, (video.videoWidth / video.videoHeight) || 16 / 9)
-      : null;
+    const aspect = (video.videoWidth / video.videoHeight) || 16 / 9;
+    const chain = lm ? computePostureChain(lm, aspect) : null;
+    // Plumb line for this exact frame — the alignment verdict shown in the report.
+    const plumb = latestPlumb.current ?? (lm ? computeClinicalPlumbLine(lm, current.view, aspect) : null);
     const capture: AssessmentCapture = {
       assessmentId: current.id,
       value: measure.value,
@@ -318,6 +324,21 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
             joints: chain.joints
               .filter((j) => !j.isBase)
               .map((j) => ({ name: j.name, angle: j.angle, aligned: j.aligned })),
+          }
+        : undefined,
+      plumbLine: plumb
+        ? {
+            view: plumb.view,
+            score: plumb.score,
+            rating: plumb.rating,
+            aligned: plumb.aligned,
+            points: plumb.points.map((p) => ({ name: p.name, offsetPct: p.offsetPct, onLine: p.onLine })),
+            symmetry: plumb.symmetry.map((s) => ({
+              name: s.name,
+              tiltDeg: s.tiltDeg,
+              level: s.level,
+              higher: s.higher,
+            })),
           }
         : undefined,
       timestamp: Date.now(),
@@ -356,6 +377,27 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
         className="absolute inset-0 bg-white pointer-events-none transition-opacity duration-150 z-40"
         style={{ opacity: flash ? 0.85 : 0 }}
       />
+
+      {/* Position verdict — driven by the plumb line. Tells the doctor/patient at
+          a glance whether the standing position is correct before capturing. */}
+      {bodyDetected && livePlumb && (
+        <div className="absolute top-36 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div
+            className={`px-4 py-2 rounded-full flex items-center gap-2 shadow-lg text-sm font-bold ${
+              livePlumb.aligned ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            }`}
+          >
+            {livePlumb.aligned ? (
+              <CheckCircle2 className="w-4 h-4" />
+            ) : (
+              <RotateCcw className="w-4 h-4" />
+            )}
+            {livePlumb.aligned
+              ? 'Position correct · Sahi hai'
+              : `Adjust position · ${livePlumb.score.toFixed(0)}% off`}
+          </div>
+        </div>
+      )}
 
       {/* Body detection indicator */}
       <div className="absolute top-24 right-4 z-20 flex items-center gap-2">

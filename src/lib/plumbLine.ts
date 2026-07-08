@@ -268,28 +268,46 @@ function sidePlumb(lm: Landmark[], aspectRatio: number, bodyScale: number): Clin
       ? { ear: L_EAR, sho: L_SHO, hip: L_HIP, knee: L_KNEE, ank: L_ANK }
       : { ear: R_EAR, sho: R_SHO, hip: R_HIP, knee: R_KNEE, ank: R_ANK };
 
-  if (v(lm[idx.ank]) <= 0.3 || v(lm[idx.sho]) <= 0.3) return null;
-  const ankle = lm[idx.ank];
+  // A side view needs at least a torso reference (shoulder or hip) to define the
+  // line. The ankle is preferred as the base but is NOT required — in many side
+  // poses the feet are out of frame or low-confidence, so we fall back down the
+  // chain (ankle → knee → hip → shoulder). This is why the plumb line must never
+  // silently disappear on left/right captures the way it used to.
+  const shoOk = v(lm[idx.sho]) > 0.25;
+  const hipOk = v(lm[idx.hip]) > 0.25;
+  if (!shoOk && !hipOk) return null;
 
-  // Facing direction from the nose relative to the ankle (fallback: shoulder).
-  const facingRef = v(lm[NOSE]) > 0.3 ? lm[NOSE].x : lm[idx.sho].x;
-  const facingSign = facingRef - ankle.x >= 0 ? 1 : -1;
+  // Lowest visible landmark on the chain becomes the plumb's base anchor.
+  const baseIdx =
+    v(lm[idx.ank]) > 0.25 ? idx.ank :
+    v(lm[idx.knee]) > 0.25 ? idx.knee :
+    hipOk ? idx.hip :
+    idx.sho;
+  const base = lm[baseIdx];
+  const baseIsAnkle = baseIdx === idx.ank;
 
-  // The classic lateral plumb hangs just anterior to the lateral malleolus.
-  const lineX = ankle.x + facingSign * ((0.015 * bodyScale) / aspectRatio);
+  // Facing direction from the nose relative to the base (fallback: shoulder/hip).
+  const facingRef =
+    v(lm[NOSE]) > 0.3 ? lm[NOSE].x : shoOk ? lm[idx.sho].x : lm[idx.hip].x;
+  const facingSign = facingRef - base.x >= 0 ? 1 : -1;
 
-  const checkpoints: { name: string; i: number; isBase?: boolean }[] = [
+  // When the ankle is the base, the classic lateral plumb hangs just anterior to
+  // the lateral malleolus; for higher fallbacks the line runs straight down.
+  const lineX = base.x + (baseIsAnkle ? facingSign * ((0.015 * bodyScale) / aspectRatio) : 0);
+
+  const checkpoints: { name: string; i: number }[] = [
     { name: 'Ear (EAM)', i: idx.ear },
     { name: 'Shoulder (acromion)', i: idx.sho },
     { name: 'Hip (gr. trochanter)', i: idx.hip },
     { name: 'Knee', i: idx.knee },
-    { name: 'Ankle (lat. malleolus)', i: idx.ank, isBase: true },
+    { name: 'Ankle (lat. malleolus)', i: idx.ank },
   ];
 
   const points: PlumbPoint[] = [];
   for (const c of checkpoints) {
     const p = lm[c.i];
-    if (v(p) <= 0.3) continue;
+    if (v(p) <= 0.25) continue;
+    const isBase = c.i === baseIdx;
     // + = anterior (forward, toward the face).
     const offsetPct = round1((((p.x - lineX) * facingSign * aspectRatio) / bodyScale) * 100);
     points.push({
@@ -297,12 +315,12 @@ function sidePlumb(lm: Landmark[], aspectRatio: number, bodyScale: number): Clin
       x: p.x,
       y: p.y,
       offsetPct,
-      onLine: c.isBase || Math.abs(offsetPct) <= SIDE_TOL_PCT,
+      onLine: isBase || Math.abs(offsetPct) <= SIDE_TOL_PCT,
     });
   }
   if (points.length === 0) return null;
 
-  return finalize('side', lineX, points, [], facingSign, ankle.y);
+  return finalize('side', lineX, points, [], facingSign, base.y);
 }
 
 function finalize(
