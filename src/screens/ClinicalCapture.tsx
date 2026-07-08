@@ -18,19 +18,30 @@ interface Props {
   onBack: () => void;
 }
 
-// Skeleton connections (MediaPipe Pose indices) — full body.
+// Skeleton connections (MediaPipe Pose indices) — clinically relevant joints
+// only. The finger fans and face-mesh links MediaPipe also returns are left out
+// so the overlay stays clean and the doctor sees just the assessment skeleton.
 const CONNECTIONS: [number, number][] = [
   // Torso + head
   [11, 12], [11, 23], [12, 24], [23, 24], [7, 8], [0, 11], [0, 12],
   // Arms
   [11, 13], [13, 15], [12, 14], [14, 16],
-  // Hands
-  [15, 17], [15, 19], [15, 21], [16, 18], [16, 20], [16, 22],
   // Legs
   [23, 25], [25, 27], [24, 26], [26, 28],
-  // Feet
-  [27, 29], [29, 31], [27, 31], [28, 30], [30, 32], [28, 32],
+  // Feet (ankle → heel → toe, needed for side-view posture)
+  [27, 29], [29, 31], [28, 30], [30, 32],
 ];
+
+// Only these landmarks get a dot. MediaPipe returns 33 points including eyes,
+// mouth and individual fingers; those add visual noise with no clinical value,
+// so they are hidden — the tracker still follows the whole body, we just draw
+// the joints that matter for posture/ROM measurement.
+const CLINICAL_POINTS = new Set<number>([
+  0, 7, 8, // nose, ears (head reference)
+  11, 12, 13, 14, 15, 16, // shoulders, elbows, wrists
+  23, 24, 25, 26, 27, 28, // hips, knees, ankles
+  29, 30, 31, 32, // heels, foot index
+]);
 
 export default function ClinicalCapture({ assessments, onComplete, onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -192,10 +203,11 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       ctx.stroke();
     }
 
-    // Landmark dots — every detected point gets a clear, visible dot.
+    // Landmark dots — only the clinically relevant joints, so the face-mesh and
+    // finger points don't clutter the image the doctor reviews.
     for (let i = 0; i < lm.length; i++) {
       const p = lm[i];
-      if (!p || !seen(i)) continue;
+      if (!p || !seen(i) || !CLINICAL_POINTS.has(i)) continue;
       const isActive = active.has(i);
       const x = p.x * w;
       const y = p.y * h;

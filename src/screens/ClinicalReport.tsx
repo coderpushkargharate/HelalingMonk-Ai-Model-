@@ -11,12 +11,19 @@ import {
   View,
 } from '../lib/clinicalKnowledge';
 import PoseIllustration from '../components/PoseIllustration';
-import { FileText, Printer, RotateCcw, Activity, AlertTriangle } from 'lucide-react';
+import { useState, ReactNode } from 'react';
+import { FileText, Printer, RotateCcw, Activity, AlertTriangle, Stethoscope, ShieldAlert } from 'lucide-react';
 
 interface Props {
   patient: PatientInfo;
   captures: AssessmentCapture[];
   onRestart: () => void;
+  /** Overrides the "New Assessment" button label (e.g. "Done" for the doctor flow). */
+  restartLabel?: string;
+  /** Optional extra section (e.g. overall doctor notes) rendered before the disclaimer. */
+  notesSection?: ReactNode;
+  /** Doctor flow: show the per-posture score/remarks block and editable exercises. */
+  doctorMode?: boolean;
 }
 
 const SEVERITY_SCORE: Record<Severity, number> = { normal: 0, mild: 1, moderate: 2, severe: 3 };
@@ -29,7 +36,7 @@ const VIEW_LABEL: Record<View, string> = {
   back: 'Back View',
 };
 
-export default function ClinicalReport({ patient, captures, onRestart }: Props) {
+export default function ClinicalReport({ patient, captures, onRestart, restartLabel, notesSection, doctorMode = false }: Props) {
   const findings = captures
     .map((c) => ({ capture: c, assessment: getAssessment(c.assessmentId)! }))
     .filter((f) => f.assessment);
@@ -76,7 +83,7 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
               onClick={onRestart}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm"
             >
-              <RotateCcw className="w-4 h-4" /> New Assessment
+              <RotateCcw className="w-4 h-4" /> {restartLabel ?? 'New Assessment'}
             </button>
           </div>
         </div>
@@ -165,6 +172,22 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
             </section>
           )}
 
+          {/* AI disclaimer — the automated measurements are estimates, not a diagnosis */}
+          <section className="mb-6">
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-amber-900">AI-generated information — not medically backed</p>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  All angles, scores and severities in this report are produced automatically by AI camera-based pose
+                  estimation. They are approximate estimates and <b>may not be true or accurate</b>. This information is
+                  <b> not medically verified</b> and must not be treated as a clinical diagnosis. Final judgement rests
+                  with the treating doctor — see each posture's <b>Doctor's Clinical Score</b> below.
+                </p>
+              </div>
+            </div>
+          </section>
+
           {/* Findings — grouped by camera view (Front / Side / Back), like a clinical posture report */}
           <section>
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Findings</h2>
@@ -180,7 +203,7 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
                     </h3>
                     <div className="space-y-5">
                       {group.map(({ capture, assessment }) => (
-                        <FindingCard key={assessment.id} capture={capture} assessment={assessment} />
+                        <FindingCard key={assessment.id} capture={capture} assessment={assessment} doctorMode={doctorMode} />
                       ))}
                     </div>
                   </div>
@@ -189,10 +212,13 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
             </div>
           </section>
 
+          {notesSection}
+
           <p className="text-[11px] text-gray-400 mt-8 border-t border-gray-100 pt-4">
             Disclaimer: This report is generated using AI-based MediaPipe pose estimation and is intended to assist a
             qualified therapist. It is not a substitute for in-person clinical examination. Measurement values are
-            camera-based estimates and should be validated by the therapist.
+            camera-based estimates and are not medically verified — they should be validated and scored by the treating
+            doctor before any clinical decision.
           </p>
         </div>
       </div>
@@ -203,13 +229,24 @@ export default function ClinicalReport({ patient, captures, onRestart }: Props) 
 function FindingCard({
   capture,
   assessment,
+  doctorMode,
 }: {
   capture: AssessmentCapture;
   assessment: ClinicalAssessment;
+  doctorMode: boolean;
 }) {
   const sev = capture.severity;
   const color = sev ? SEVERITY_COLOR[sev] : '#9ca3af';
   const gauge = ASSESSMENT_GAUGE[assessment.id];
+
+  // Doctor-entered fields for this posture. Kept on the client and captured in
+  // the printed/PDF report; not sent to the AI (the doctor's score overrides it).
+  const [docScore, setDocScore] = useState<number | null>(null);
+  const [docRemarks, setDocRemarks] = useState('');
+  // Auto exercises are the starting suggestion; the doctor edits/adds their own.
+  const [docExercises, setDocExercises] = useState(
+    assessment.exercises.map((ex) => `${ex.name} — ${ex.sets} sets × ${ex.reps} · ${ex.frequency}`).join('\n')
+  );
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden break-inside-avoid">
@@ -218,12 +255,12 @@ function FindingCard({
         <div className="grid grid-cols-2 md:w-[28rem] flex-shrink-0">
           <figure className="relative">
             <img
-              src={capture.imageData || capture.rawImageData}
-              alt={`${assessment.name} — AI pose analysis`}
+              src={capture.rawImageData || capture.imageData}
+              alt={`${assessment.name} — patient photo`}
               className="w-full h-44 object-cover bg-gray-900"
             />
             <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/60 text-white px-1.5 py-0.5 rounded">
-              Your Posture (AI)
+              Patient Photo
             </figcaption>
           </figure>
           <figure className="relative border-l border-gray-200 bg-slate-50 flex items-center justify-center">
@@ -258,7 +295,7 @@ function FindingCard({
               <p className="text-2xl font-bold leading-none" style={{ color }}>
                 {capture.value !== null ? `${capture.value}${assessment.unit}` : 'N/A'}
               </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">Your value</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">Your value (AI estimate)</p>
             </div>
             <div>
               <p className="text-[11px] text-gray-500">Ideal</p>
@@ -320,21 +357,88 @@ function FindingCard({
         </div>
       </div>
 
-      {/* Exercises for flagged findings */}
-      {sev && sev !== 'normal' && (
-        <div className="bg-amber-50 border-t border-amber-100 p-4">
-          <p className="text-xs font-semibold text-amber-800 flex items-center gap-1 mb-2">
-            <AlertTriangle className="w-3.5 h-3.5" /> Recommended Exercises
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {assessment.exercises.map((ex) => (
-              <div key={ex.name} className="bg-white rounded-lg p-2 border border-amber-100">
-                <p className="font-medium text-gray-800 text-sm">{ex.name}</p>
-                <p className="text-xs text-gray-500">{ex.sets} sets × {ex.reps} · {ex.frequency}</p>
-              </div>
+      {/* Doctor's clinical score — filled by the doctor, overrides the AI output */}
+      {doctorMode && (
+      <div className="border-t border-blue-100 bg-blue-50/60 p-4 break-inside-avoid">
+        <div className="flex items-center gap-2 mb-2">
+          <Stethoscope className="w-4 h-4 text-blue-700" />
+          <p className="text-xs font-bold text-blue-900 uppercase tracking-wide">Doctor's Clinical Score</p>
+          <span className="ml-auto text-[10px] text-blue-500 font-medium">To be filled by the doctor</span>
+        </div>
+
+        {/* 1–10 score */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-600">Score (1–10):</span>
+          <div className="flex gap-1">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setDocScore(docScore === n ? null : n)}
+                className={`w-7 h-7 rounded-md text-xs font-semibold border transition-colors ${
+                  docScore === n
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                }`}
+              >
+                {n}
+              </button>
             ))}
           </div>
+          {docScore !== null && (
+            <span className="text-sm font-bold text-blue-800">{docScore}/10</span>
+          )}
         </div>
+
+        {/* Notes / remarks / justification */}
+        <label className="block text-xs text-gray-600 mt-3 mb-1">
+          Notes, remarks &amp; justification for the score
+        </label>
+        <textarea
+          value={docRemarks}
+          onChange={(e) => setDocRemarks(e.target.value)}
+          placeholder="Doctor's observations, remarks, and why this score was given…"
+          className="w-full min-h-[70px] border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+        />
+        <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
+          Disclaimer: The AI measurement shown above is an automated camera-based estimate and is
+          <b> not medically verified</b> — it may not be accurate and must not be used as a diagnosis. The doctor's
+          score and remarks are the clinical judgement of record.
+        </p>
+      </div>
+      )}
+
+      {/* Recommended exercises. Doctor flow: editable (AI-suggested starting list).
+          Patient flow: the static auto list for flagged findings, as before. */}
+      {doctorMode ? (
+        <div className="bg-amber-50 border-t border-amber-100 p-4 break-inside-avoid">
+          <p className="text-xs font-semibold text-amber-800 flex items-center gap-1 mb-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> Recommended Exercises
+            <span className="ml-auto text-[10px] text-amber-500 font-medium">AI-suggested · editable by doctor</span>
+          </p>
+          <textarea
+            value={docExercises}
+            onChange={(e) => setDocExercises(e.target.value)}
+            placeholder="One exercise per line — e.g. Chin Tucks — 3 sets × 10 · Daily"
+            className="w-full min-h-[80px] border border-amber-200 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
+          />
+        </div>
+      ) : (
+        sev && sev !== 'normal' && (
+          <div className="bg-amber-50 border-t border-amber-100 p-4 break-inside-avoid">
+            <p className="text-xs font-semibold text-amber-800 flex items-center gap-1 mb-2">
+              <AlertTriangle className="w-3.5 h-3.5" /> Recommended Exercises
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {assessment.exercises.map((ex) => (
+                <div key={ex.name} className="bg-white rounded-lg p-2 border border-amber-100">
+                  <p className="font-medium text-gray-800 text-sm">{ex.name}</p>
+                  <p className="text-xs text-gray-500">{ex.sets} sets × {ex.reps} · {ex.frequency}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       )}
     </div>
   );

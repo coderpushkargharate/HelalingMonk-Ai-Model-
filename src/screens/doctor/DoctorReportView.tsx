@@ -112,6 +112,7 @@ export default function DoctorReportView({ patient, captures, onDone }: Props) {
       onRestart={onDone}
       restartLabel="Done"
       notesSection={notesSection}
+      doctorMode
     />
   );
 }
