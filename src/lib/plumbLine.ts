@@ -376,6 +376,41 @@ export function drawClinicalPlumbLine(
 
   ctx.save();
 
+  // Moving BODY line (drawn FIRST so it sits BEHIND the fixed plumb reference):
+  // the subject's actual central axis, connecting the anatomical checkpoints
+  // head→foot. This line shifts and bends as the person moves, so the gap
+  // between it and the fixed vertical plumb shows at a glance whether they are
+  // standing on the centerline (green = sahi / aligned) or off it (red = galat).
+  if (plumb.points.length >= 2) {
+    // Order points top→bottom so the polyline reads head → foot.
+    const axis = [...plumb.points].sort((a, b) => a.y - b.y);
+
+    // Soft dark backing so the coloured body line stays readable over the video.
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(axis[0].x * w, axis[0].y * h);
+    for (let i = 1; i < axis.length; i++) ctx.lineTo(axis[i].x * w, axis[i].y * h);
+    ctx.stroke();
+
+    // Each segment is green where both ends sit on the plumb, red where the body
+    // drifts off it — a live "sahi / galat" read of the posture.
+    ctx.lineWidth = 3.5;
+    for (let i = 1; i < axis.length; i++) {
+      const a = axis[i - 1];
+      const b = axis[i];
+      ctx.strokeStyle = a.onLine && b.onLine ? '#22c55e' : '#ff4d4d';
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+  }
+
   // Vertical plumb reference — dashed, full height of the body, with a glow.
   ctx.setLineDash([10, 8]);
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
