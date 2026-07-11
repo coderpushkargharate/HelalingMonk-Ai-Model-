@@ -166,7 +166,6 @@ function frontBackPlumb(
 ): ClinicalPlumbLine | null {
   const ankleMid = midpoint(lm, L_ANK, R_ANK) ?? midpoint(lm, L_HIP, R_HIP) ?? midpoint(lm, L_SHO, R_SHO);
   if (!ankleMid) return null;
-  const lineX = ankleMid.x;
 
   const shoulderMid = midpoint(lm, L_SHO, R_SHO);
   const hipMid = midpoint(lm, L_HIP, R_HIP);
@@ -174,6 +173,18 @@ function frontBackPlumb(
   const earMid = midpoint(lm, L_EAR, R_EAR);
   const mouthMid = midpoint(lm, L_MOUTH, R_MOUTH);
   const kneeMid = midpoint(lm, L_KNEE, R_KNEE);
+
+  // The vertical reference must run down the BODY'S CENTRAL AXIS — head → shoulders
+  // → hips → knees → ankles — not just hang off the ankles. Averaging the visible
+  // midline points keeps the line dead-centre through the body (nose, shoulder,
+  // legs) even if the feet drift or one landmark is briefly noisy, which is what a
+  // clinical plumb screen needs. Each point's deviation from this centre is then
+  // reported below.
+  const noseMid = v(lm[NOSE]) > 0.3 ? { x: lm[NOSE].x, y: lm[NOSE].y } : null;
+  const axisPoints = [noseMid ?? eyeMid, shoulderMid, hipMid, kneeMid, ankleMid].filter(
+    (p): p is Pt => p != null
+  );
+  const lineX = axisPoints.reduce((sum, p) => sum + p.x, 0) / axisPoints.length;
 
   const points: PlumbPoint[] = [];
   const add = (name: string, p: Pt | null | undefined) => {

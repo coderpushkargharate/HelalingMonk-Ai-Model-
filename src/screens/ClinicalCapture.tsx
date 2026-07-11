@@ -6,15 +6,16 @@ import { computeClinicalPlumbLine, drawClinicalPlumbLine, ClinicalPlumbLine } fr
 import {
   ClinicalAssessment,
   AssessmentCapture,
+  ExtraShot,
   MeasureResult,
   SEVERITY_COLOR,
   SEVERITY_LABEL,
 } from '../lib/clinicalKnowledge';
-import { Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, SwitchCamera } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, SwitchCamera, Plus, X, Images } from 'lucide-react';
 
 interface Props {
   assessments: ClinicalAssessment[];
-  onComplete: (captures: AssessmentCapture[]) => void;
+  onComplete: (captures: AssessmentCapture[], extraShots: ExtraShot[]) => void;
   onBack: () => void;
 }
 
@@ -64,6 +65,9 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const [bodyDetected, setBodyDetected] = useState(false);
   const [flash, setFlash] = useState(false);
   const [captures, setCaptures] = useState<Record<string, AssessmentCapture>>({});
+  // Extra free-angle photos (multiple per pose allowed) — appended, never
+  // overwritten, so the doctor can document a posture from many angles.
+  const [extraShots, setExtraShots] = useState<ExtraShot[]>([]);
 
   const current = assessments[index];
   // Keep a ref of the active assessment so the animation loop always measures
@@ -281,28 +285,64 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     }
   };
 
-  const handleCapture = () => {
+  // Grab the current frame as { raw (no overlay), overlay (pose points baked in) }
+  // JPEG data URLs. Returns null if the video/canvas aren't ready.
+  const snapshot = (): { raw: string; overlay: string } | null => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) return;
-    const lm = latestLandmarks.current;
+    if (!canvas || !video || !video.videoWidth) return null;
 
-    // Raw snapshot: the original camera frame only (no overlay) → report left side.
     const raw = document.createElement('canvas');
     raw.width = video.videoWidth;
     raw.height = video.videoHeight;
     const rctx = raw.getContext('2d');
-    if (!rctx) return;
+    if (!rctx) return null;
     rctx.drawImage(video, 0, 0, raw.width, raw.height);
 
-    // Overlay snapshot: original frame + the live pose-points overlay → report right side.
     const out = document.createElement('canvas');
     out.width = video.videoWidth;
     out.height = video.videoHeight;
     const octx = out.getContext('2d');
-    if (!octx) return;
+    if (!octx) return null;
     octx.drawImage(video, 0, 0, out.width, out.height);
     octx.drawImage(canvas, 0, 0, out.width, out.height);
+
+    return { raw: raw.toDataURL('image/jpeg', 0.85), overlay: out.toDataURL('image/jpeg', 0.85) };
+  };
+
+  const flashShutter = () => {
+    setFlash(true);
+    setTimeout(() => setFlash(false), 180);
+  };
+
+  // Capture an additional angle for the current pose. Appended to a gallery
+  // (never overwrites the primary capture) so a posture can be documented from
+  // as many angles as the doctor wants.
+  const handleCaptureExtra = () => {
+    const shot = snapshot();
+    if (!shot) return;
+    const count = extraShots.filter((s) => s.assessmentId === current.id).length + 1;
+    setExtraShots((prev) => [
+      ...prev,
+      {
+        id: `${current.id}-${Date.now()}`,
+        assessmentId: current.id,
+        label: `${current.name} · angle ${count}`,
+        imageData: shot.overlay,
+        rawImageData: shot.raw,
+        timestamp: Date.now(),
+      },
+    ]);
+    flashShutter();
+  };
+
+  const removeExtra = (id: string) => setExtraShots((prev) => prev.filter((s) => s.id !== id));
+
+  const handleCapture = () => {
+    const shot = snapshot();
+    if (!shot) return;
+    const lm = latestLandmarks.current;
+    const video = videoRef.current!;
 
     const measure = lm
       ? current.measure(lm)
@@ -315,8 +355,8 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       assessmentId: current.id,
       value: measure.value,
       severity: measure.severity,
-      imageData: out.toDataURL('image/jpeg', 0.85),
-      rawImageData: raw.toDataURL('image/jpeg', 0.85),
+      imageData: shot.overlay,
+      rawImageData: shot.raw,
       postureDeviation: chain
         ? {
             score: chain.score,
@@ -346,8 +386,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     setCaptures((prev) => ({ ...prev, [current.id]: capture }));
 
     // Shutter flash so the doctor sees the photo was taken instantly.
-    setFlash(true);
-    setTimeout(() => setFlash(false), 180);
+    flashShutter();
 
     // Auto-advance to the next un-captured assessment, if any.
     const nextUncaptured = assessments.findIndex(
@@ -364,8 +403,10 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     const ordered = assessments
       .map((a) => captures[a.id])
       .filter((c): c is AssessmentCapture => Boolean(c));
-    onComplete(ordered);
+    onComplete(ordered, extraShots);
   };
+
+  const currentExtras = extraShots.filter((s) => s.assessmentId === current?.id);
 
   return (
     <div className="min-h-screen bg-black flex flex-col relative">
@@ -505,6 +546,28 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
             })}
           </div>
 
+          {/* Extra angle shots for THIS pose — a gallery the doctor can add to
+              freely. Each is removable; all flow into the report. */}
+          {currentExtras.length > 0 && (
+            <div className="mb-3 flex items-center gap-2 overflow-x-auto pb-1">
+              <span className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-white/70">
+                <Images className="w-3.5 h-3.5" /> Extra angles ({currentExtras.length})
+              </span>
+              {currentExtras.map((s) => (
+                <div key={s.id} className="relative flex-shrink-0" style={{ width: 56, height: 42 }}>
+                  <img src={s.imageData} alt={s.label} className="w-full h-full object-cover rounded-md border border-white/20" />
+                  <button
+                    onClick={() => removeExtra(s.id)}
+                    className="absolute -top-1.5 -right-1.5 bg-red-600 hover:bg-red-700 text-white rounded-full p-0.5 shadow"
+                    title="Remove this angle"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIndex((i) => Math.max(0, i - 1))}
@@ -521,6 +584,15 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
             >
               {captured ? <RotateCcw className="w-5 h-5" /> : <Camera className="w-5 h-5" />}
               {captured ? 'Re-capture' : 'Capture'}
+            </button>
+
+            <button
+              onClick={handleCaptureExtra}
+              disabled={!ready}
+              title="Capture another angle of this pose"
+              className="bg-white/15 hover:bg-white/25 disabled:opacity-30 text-white px-4 py-4 rounded-xl flex items-center gap-1.5 text-sm font-semibold"
+            >
+              <Plus className="w-5 h-5" /> Angle
             </button>
 
             <button

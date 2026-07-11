@@ -1,6 +1,7 @@
 import {
   PatientInfo,
   AssessmentCapture,
+  ExtraShot,
   ClinicalAssessment,
   getAssessment,
   SEVERITY_COLOR,
@@ -12,11 +13,14 @@ import {
 } from '../lib/clinicalKnowledge';
 import PoseIllustration from '../components/PoseIllustration';
 import { useState, ReactNode } from 'react';
-import { FileText, Printer, RotateCcw, Activity, AlertTriangle, Stethoscope, ShieldAlert } from 'lucide-react';
+import { FileText, Printer, RotateCcw, Activity, AlertTriangle, Stethoscope, ShieldAlert, Download } from 'lucide-react';
+import { downloadReportPdf } from '../lib/reportPdf';
 
 interface Props {
   patient: PatientInfo;
   captures: AssessmentCapture[];
+  /** Extra free-angle photos taken during capture, shown as a gallery. */
+  extraShots?: ExtraShot[];
   onRestart: () => void;
   /** Overrides the "New Assessment" button label (e.g. "Done" for the doctor flow). */
   restartLabel?: string;
@@ -36,7 +40,24 @@ const VIEW_LABEL: Record<View, string> = {
   back: 'Back View',
 };
 
-export default function ClinicalReport({ patient, captures, onRestart, restartLabel, notesSection, doctorMode = false }: Props) {
+export default function ClinicalReport({ patient, captures, extraShots = [], onRestart, restartLabel, notesSection, doctorMode = false }: Props) {
+  const [downloading, setDownloading] = useState(false);
+
+  // One-click PDF download. Composed programmatically for a crisp, consistent
+  // medical document; if anything goes wrong we fall back to the browser's
+  // native print-to-PDF so the user is never left without a way to save.
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await downloadReportPdf(patient, captures, extraShots);
+    } catch (err) {
+      console.error('PDF export failed, falling back to print', err);
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const findings = captures
     .map((c) => ({ capture: c, assessment: getAssessment(c.assessmentId)! }))
     .filter((f) => f.assessment);
@@ -80,10 +101,17 @@ export default function ClinicalReport({ patient, captures, onRestart, restartLa
           </h1>
           <div className="flex gap-2">
             <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded-full bg-slate-900 hover:bg-slate-800 disabled:opacity-60 text-white px-4 py-2 flex items-center gap-2 text-sm font-semibold transition-colors shadow-sm"
+            >
+              <Download className="w-4 h-4" /> {downloading ? 'Preparing…' : 'Download PDF'}
+            </button>
+            <button
               onClick={() => window.print()}
               className="rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 flex items-center gap-2 text-sm transition-colors shadow-sm"
             >
-              <Printer className="w-4 h-4" /> Print / PDF
+              <Printer className="w-4 h-4" /> Print
             </button>
             <button
               onClick={onRestart}
@@ -217,6 +245,23 @@ export default function ClinicalReport({ patient, captures, onRestart, restartLa
               })}
             </div>
           </section>
+
+          {/* Additional angle photos captured during the session */}
+          {extraShots.length > 0 && (
+            <section className="mt-8">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                Additional Views ({extraShots.length})
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {extraShots.map((s) => (
+                  <figure key={s.id} className="rounded-lg overflow-hidden border border-gray-200 break-inside-avoid">
+                    <img src={s.imageData} alt={s.label} className="w-full h-32 object-cover bg-gray-900" />
+                    <figcaption className="px-2 py-1 text-[11px] text-gray-600 bg-gray-50 truncate">{s.label}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </section>
+          )}
 
           {notesSection}
 

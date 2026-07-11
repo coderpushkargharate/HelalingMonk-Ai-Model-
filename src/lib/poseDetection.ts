@@ -1,7 +1,7 @@
-import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
+import type { PoseLandmarker as PoseLandmarkerInstance } from '@mediapipe/tasks-vision';
 import { PoseSmoother } from './poseSmoothing';
 
-let poseLandmarker: PoseLandmarker | null = null;
+let poseLandmarker: PoseLandmarkerInstance | null = null;
 
 // The "full" model is markedly more accurate than "lite" (better limb tracking
 // and depth) while still running in real time with the GPU delegate. Swap to
@@ -12,6 +12,11 @@ const MODEL_URL =
 export async function initializePoseLandmarker() {
   if (poseLandmarker) return poseLandmarker;
 
+  // Load the multi-MB MediaPipe runtime ON DEMAND (dynamic import) so it is
+  // code-split into its own chunk. The marketing site and patient intake never
+  // download it — it arrives only when the assessment actually needs the camera.
+  const { PoseLandmarker, FilesetResolver } = await import('@mediapipe/tasks-vision');
+
   // Pin the WASM build to the exact installed @mediapipe/tasks-vision version.
   // Using `@latest` can pull a WASM runtime newer than the bundled JS API, which
   // silently breaks landmark detection on some days — unacceptable for clinic use.
@@ -19,33 +24,29 @@ export async function initializePoseLandmarker() {
     'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
   );
 
+  const create = (delegate: 'GPU' | 'CPU') =>
+    PoseLandmarker.createFromOptions(vision, {
+      baseOptions: { modelAssetPath: MODEL_URL, delegate },
+      runningMode: 'VIDEO',
+      numPoses: 1,
+      // Tighter thresholds keep only confident detections, which steadies the
+      // clinical measurements; tracking confidence stays moderate so a briefly
+      // occluded limb is not dropped mid-capture.
+      minPoseDetectionConfidence: 0.6,
+      minPosePresenceConfidence: 0.6,
+      minTrackingConfidence: 0.6,
+      outputSegmentationMasks: false,
+    });
+
   try {
-    poseLandmarker = await createLandmarker(vision, 'GPU');
+    poseLandmarker = await create('GPU');
   } catch (err) {
     // Some devices/browsers lack a usable WebGL context; CPU still works.
     console.warn('GPU pose delegate unavailable, falling back to CPU.', err);
-    poseLandmarker = await createLandmarker(vision, 'CPU');
+    poseLandmarker = await create('CPU');
   }
 
   return poseLandmarker;
-}
-
-function createLandmarker(
-  vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>,
-  delegate: 'GPU' | 'CPU'
-) {
-  return PoseLandmarker.createFromOptions(vision, {
-    baseOptions: { modelAssetPath: MODEL_URL, delegate },
-    runningMode: 'VIDEO',
-    numPoses: 1,
-    // Tighter thresholds keep only confident detections, which steadies the
-    // clinical measurements; tracking confidence stays moderate so a briefly
-    // occluded limb is not dropped mid-capture.
-    minPoseDetectionConfidence: 0.6,
-    minPosePresenceConfidence: 0.6,
-    minTrackingConfidence: 0.6,
-    outputSegmentationMasks: false,
-  });
 }
 
 const LANDMARK_NAMES = [

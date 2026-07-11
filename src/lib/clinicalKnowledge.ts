@@ -93,6 +93,18 @@ export interface CapturedPlumbLine {
   symmetry: { name: string; tiltDeg: number; level: boolean; higher: 'left' | 'right' | 'even' }[];
 }
 
+/** An extra free-angle snapshot the doctor takes for a pose (beyond the single
+ *  primary capture) — e.g. the same posture photographed from another angle.
+ *  These are shown as a gallery in the report but are not re-measured. */
+export interface ExtraShot {
+  id: string;
+  assessmentId: string;
+  label: string;
+  imageData: string; // annotated frame (overlay baked in)
+  rawImageData?: string; // original frame, no overlay
+  timestamp: number;
+}
+
 export interface AssessmentCapture {
   assessmentId: string;
   value: number | null;
@@ -1223,6 +1235,153 @@ export const CLINICAL_ASSESSMENTS: ClinicalAssessment[] = [
       const angle = Math.round(tiltFromVertical(lm[sho].x, lm[sho].y, lm[hip].x, lm[hip].y));
       const severity: Severity = angle >= 25 ? 'normal' : angle >= 15 ? 'mild' : angle >= 5 ? 'moderate' : 'severe';
       return { value: angle, severity, points: [sho, hip], detail: `${angle}°` };
+    },
+  },
+
+  // ---------------- Seated positions ----------------
+  {
+    id: 'seated_forward_head',
+    name: 'Seated Forward Head (Sitting)',
+    nameHi: 'बैठकर आगे झुका सिर',
+    bodyRegion: 'Cervical',
+    category: 'Posture Assessment',
+    view: 'side',
+    patientPosition: 'Sitting',
+    instruction: 'Sit sideways to the camera on a stool, feet flat, and look straight ahead naturally. Do not correct your posture.',
+    instructionHi: 'स्टूल पर कैमरे की ओर बगल से बैठें, पैर ज़मीन पर सपाट रखें, और स्वाभाविक रूप से सीधे देखें। मुद्रा ठीक न करें।',
+    complaints: ['Neck pain while sitting', 'Desk posture', 'Headache', 'Upper back tension'],
+    landmarkNames: ['Ear (Tragus)', 'Shoulder (Acromion)', 'Horizontal Reference'],
+    measurementName: 'Seated Craniovertebral Angle',
+    unit: '°',
+    ranges: { normal: '≥ 50°', mild: '45–50°', moderate: '40–45°', severe: '< 40°' },
+    painArea: 'Neck',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Seated Chin Tucks', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Upper Trap Stretch', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Scapular Retractions', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'Physiopedia',
+    measure: (lm) => {
+      const side = betterSide(lm, L_EAR, R_EAR);
+      const ear = side === 'right' ? R_EAR : L_EAR;
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      if (!vis(lm, ear) || !vis(lm, sho)) return notVisible([ear, sho]);
+      const dx = Math.abs(lm[ear].x - lm[sho].x) || 1e-6;
+      const dy = Math.abs(lm[sho].y - lm[ear].y);
+      const cva = Math.round(deg(Math.atan2(dy, dx)));
+      const severity: Severity = cva >= 50 ? 'normal' : cva >= 45 ? 'mild' : cva >= 40 ? 'moderate' : 'severe';
+      return { value: cva, severity, points: [ear, sho], detail: `${cva}°` };
+    },
+  },
+  {
+    id: 'seated_slump',
+    name: 'Seated Slump / Upper-Back Rounding (Sitting)',
+    nameHi: 'बैठकर पीठ का झुकाव',
+    bodyRegion: 'Thoracic',
+    category: 'Posture Assessment',
+    view: 'side',
+    patientPosition: 'Sitting',
+    instruction: 'Sit sideways to the camera as you normally sit at a desk. Relax — do not straighten up.',
+    instructionHi: 'कैमरे की ओर बगल से बैठें जैसे आप डेस्क पर सामान्यतः बैठते हैं। आराम करें — सीधे होने की कोशिश न करें।',
+    complaints: ['Rounded back while sitting', 'Slouching', 'Upper back pain', 'Poor desk posture'],
+    landmarkNames: ['Ear', 'Shoulder', 'Hip'],
+    measurementName: 'Seated Trunk Rounding',
+    unit: '°',
+    ranges: { normal: '0–8°', mild: '8–15°', moderate: '15–25°', severe: '> 25°' },
+    painArea: 'Upper Back',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Seated Thoracic Extension', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Wall Angels', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Scapular Squeeze', sets: '3', reps: '12', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'Partial',
+    source: 'Clinical Experience',
+    measure: (lm) => {
+      const side = betterSide(lm, L_EAR, R_EAR);
+      const ear = side === 'right' ? R_EAR : L_EAR;
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      if (!vis(lm, ear) || !vis(lm, sho) || !vis(lm, hip)) return notVisible([ear, sho, hip]);
+      const dev = Math.round(Math.abs(180 - calculateAngle2D(lm[ear], lm[sho], lm[hip])));
+      const severity: Severity = dev <= 8 ? 'normal' : dev <= 15 ? 'mild' : dev <= 25 ? 'moderate' : 'severe';
+      return { value: dev, severity, points: [ear, sho, hip], detail: `${dev}°` };
+    },
+  },
+
+  // ---------------- Lying (supine) positions ----------------
+  {
+    id: 'supine_slr',
+    name: 'Straight Leg Raise — SLR (Lying)',
+    nameHi: 'सीधा पैर उठाना (लेटकर)',
+    bodyRegion: 'Hip',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Lying',
+    instruction: 'Lie on your back with your side to the camera, keep the leg straight, and slowly raise it as high as comfortable.',
+    instructionHi: 'पीठ के बल लेटें, कैमरे की ओर बगल रखें, पैर सीधा रखते हुए धीरे-धीरे जितना आराम से हो सके उतना ऊपर उठाएं।',
+    complaints: ['Tight hamstrings', 'Sciatica', 'Lower back pain', 'Limited leg raise'],
+    landmarkNames: ['Shoulder', 'Hip', 'Ankle'],
+    measurementName: 'SLR Hip Flexion',
+    unit: '°',
+    ranges: { normal: '≥ 80°', mild: '60–80°', moderate: '30–60°', severe: '< 30°' },
+    painArea: 'Hip',
+    painCorrelation: 'Strong',
+    exercises: [
+      { name: 'Supine Hamstring Stretch (strap)', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Nerve Glides', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Active SLR', sets: '3', reps: '10', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_HIP, R_HIP);
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const ank = side === 'right' ? R_ANK : L_ANK;
+      if (!vis(lm, sho) || !vis(lm, hip) || !vis(lm, ank)) return notVisible([hip, ank]);
+      // Leg lying flat away from the trunk ≈ 180° at the hip; raising it toward
+      // vertical reduces that angle, so the raise from the floor = 180 − angle.
+      const raise = Math.max(0, Math.round(180 - calculateAngle2D(lm[sho], lm[hip], lm[ank])));
+      const severity: Severity = raise >= 80 ? 'normal' : raise >= 60 ? 'mild' : raise >= 30 ? 'moderate' : 'severe';
+      return { value: raise, severity, points: [hip, ank], detail: `${raise}°` };
+    },
+  },
+  {
+    id: 'supine_knee_to_chest',
+    name: 'Knee-to-Chest Hip Flexion (Lying)',
+    nameHi: 'घुटना छाती तक (लेटकर)',
+    bodyRegion: 'Hip',
+    category: 'Range of Motion',
+    view: 'side',
+    patientPosition: 'Lying',
+    instruction: 'Lie on your back with your side to the camera and pull one bent knee toward your chest as far as comfortable.',
+    instructionHi: 'पीठ के बल लेटें, कैमरे की ओर बगल रखें, और एक मुड़े हुए घुटने को जितना हो सके छाती की ओर खींचें।',
+    complaints: ['Hip stiffness', 'Lower back tightness', 'Limited hip bend'],
+    landmarkNames: ['Shoulder', 'Hip', 'Knee'],
+    measurementName: 'Hip Flexion (knee bent)',
+    unit: '°',
+    ranges: { normal: '≥ 110°', mild: '90–110°', moderate: '60–90°', severe: '< 60°' },
+    painArea: 'Hip',
+    painCorrelation: 'Moderate',
+    exercises: [
+      { name: 'Single Knee-to-Chest Stretch', sets: '3', reps: '30 sec hold', frequency: 'Daily' },
+      { name: 'Double Knee-to-Chest', sets: '3', reps: '10', frequency: 'Daily' },
+      { name: 'Supine Hip Flexion (active)', sets: '3', reps: '10', frequency: 'Daily' },
+    ],
+    aiFeasibility: 'High',
+    source: 'APTA Guideline',
+    measure: (lm) => {
+      const side = betterSide(lm, L_KNEE, R_KNEE);
+      const sho = side === 'right' ? R_SHO : L_SHO;
+      const hip = side === 'right' ? R_HIP : L_HIP;
+      const knee = side === 'right' ? R_KNEE : L_KNEE;
+      if (!vis(lm, sho) || !vis(lm, hip) || !vis(lm, knee)) return notVisible([hip, knee]);
+      const flex = Math.max(0, Math.round(180 - calculateAngle2D(lm[sho], lm[hip], lm[knee])));
+      const severity: Severity = flex >= 110 ? 'normal' : flex >= 90 ? 'mild' : flex >= 60 ? 'moderate' : 'severe';
+      return { value: flex, severity, points: [hip, knee], detail: `${flex}°` };
     },
   },
 ];

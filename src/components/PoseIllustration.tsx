@@ -60,6 +60,14 @@ const POSES: Record<string, PoseMap> = {
   trunk_lateral_flexion: { type: 'anterior', muscles: ['obliques'] },
   trunk_extension: { type: 'posterior', muscles: ['lower-back'] },
 
+  // Seated
+  seated_forward_head: { type: 'posterior', muscles: ['neck', 'trapezius'] },
+  seated_slump: { type: 'posterior', muscles: ['upper-back', 'trapezius'] },
+
+  // Lying (supine)
+  supine_slr: { type: 'posterior', muscles: ['hamstring', 'gluteal'] },
+  supine_knee_to_chest: { type: 'posterior', muscles: ['gluteal', 'lower-back'] },
+
   // Lower limb
   squat_depth: { type: 'anterior', muscles: ['quadriceps', 'calves'] },
   hip_abduction: { type: 'anterior', muscles: ['abductors', 'quadriceps'] },

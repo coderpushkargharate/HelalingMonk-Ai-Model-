@@ -1,13 +1,17 @@
-import { ReactElement } from 'react';
+import { lazy, Suspense, ReactElement } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/AuthContext';
 import { Role } from './lib/auth';
-import PublicApp from './screens/PublicApp';
-import Login from './screens/Login';
-import AdminApp from './screens/admin/AdminApp';
-import DoctorApp from './screens/doctor/DoctorApp';
-import ReceptionApp from './screens/reception/ReceptionApp';
-import PatientHome from './screens/patient/PatientHome';
+
+// Each top-level app is lazy-loaded so a signed-in doctor never downloads the
+// admin bundle, a guest never downloads any dashboard, and heavy dependencies
+// (MediaPipe, jsPDF) stay inside the chunks that actually use them.
+const PublicApp = lazy(() => import('./screens/PublicApp'));
+const Login = lazy(() => import('./screens/Login'));
+const AdminApp = lazy(() => import('./screens/admin/AdminApp'));
+const DoctorApp = lazy(() => import('./screens/doctor/DoctorApp'));
+const ReceptionApp = lazy(() => import('./screens/reception/ReceptionApp'));
+const PatientHome = lazy(() => import('./screens/patient/PatientHome'));
 
 // Each role gets its own URL space. Signed-in users land on their role home.
 const HOME: Record<Role, string> = {
@@ -44,6 +48,7 @@ export default function App() {
   if (loading) return <Splash />;
 
   return (
+    <Suspense fallback={<Splash />}>
     <Routes>
       {/* Auth */}
       <Route path="/login" element={user ? <Navigate to={HOME[user.role]} replace /> : <Login />} />
@@ -57,5 +62,6 @@ export default function App() {
       {/* Public site + free AI assessment demo (also the catch-all) */}
       <Route path="/*" element={<PublicApp />} />
     </Routes>
+    </Suspense>
   );
 }
