@@ -65,23 +65,29 @@ export default function ClinicalReport({ patient, captures, onRestart, restartLa
       )[0])?.capture.postureDeviation ?? null;
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8 print:py-0 print:bg-white">
-      <div className="max-w-4xl mx-auto px-6 print:px-0">
+    <div className="relative min-h-screen overflow-hidden bg-[#f6faf8] py-8 text-slate-900 print:overflow-visible print:bg-white print:py-0">
+      {/* Ambient soft glows to match the site — hidden when printing so the PDF stays clean. */}
+      <div className="pointer-events-none absolute inset-0 print:hidden">
+        <div className="absolute -top-40 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full bg-emerald-300/20 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-cyan-200/25 blur-[140px]" />
+      </div>
+
+      <div className="relative z-10 max-w-4xl mx-auto px-6 print:px-0">
         {/* Action bar (hidden when printing) */}
         <div className="flex justify-between items-center mb-6 print:hidden">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <FileText className="w-6 h-6 text-green-600" /> Assessment Report
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 flex items-center gap-2">
+            <FileText className="w-6 h-6 text-emerald-600" /> Assessment Report
           </h1>
           <div className="flex gap-2">
             <button
               onClick={() => window.print()}
-              className="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 text-sm"
+              className="rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-4 py-2 flex items-center gap-2 text-sm transition-colors shadow-sm"
             >
               <Printer className="w-4 h-4" /> Print / PDF
             </button>
             <button
               onClick={onRestart}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm"
+              className="rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-semibold px-5 py-2 flex items-center gap-2 text-sm shadow-lg shadow-emerald-500/25 transition-transform hover:scale-[1.03]"
             >
               <RotateCcw className="w-4 h-4" /> {restartLabel ?? 'New Assessment'}
             </button>

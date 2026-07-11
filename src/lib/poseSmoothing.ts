@@ -23,9 +23,15 @@ export interface OneEuroConfig {
   dCutoff: number;
 }
 
+// Tuned for a person holding a clinical pose: a low baseline cutoff kills the
+// residual per-frame shimmer so the skeleton, landmarks and — most visibly — the
+// plumb/deviation line sit rock-steady when the subject is still. `beta` still
+// lets the filter open up the moment they actually move, so there is no drag
+// when they step or turn. Lower minCutoff = steadier line (this is the setting
+// that stops the deviation line from "always moving"); raise it if it feels laggy.
 const DEFAULT_CONFIG: OneEuroConfig = {
-  minCutoff: 1.7,
-  beta: 0.015,
+  minCutoff: 0.9,
+  beta: 0.008,
   dCutoff: 1.0,
 };
 
