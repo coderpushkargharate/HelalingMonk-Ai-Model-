@@ -6,10 +6,38 @@ export interface VoiceMessage {
 
 let synth: SpeechSynthesis | null = null;
 let currentUtterance: SpeechSynthesisUtterance | null = null;
+let voices: SpeechSynthesisVoice[] = [];
+let preferredVoice: SpeechSynthesisVoice | null = null;
+
+// Names that indicate a female English voice across common platforms
+// (Windows/Chrome/macOS/Android). We match these to keep the coach's voice a
+// consistent, friendly female English voice.
+const FEMALE_EN_HINTS = [
+  'female',
+  'samantha', 'victoria', 'karen', 'moira', 'tessa', 'fiona', 'susan', 'allison', 'ava', 'nora',
+  'zira', 'aria', 'jenny', 'michelle', 'sonia', 'libby', 'hazel', 'catherine', 'linda',
+  'google uk english female', 'google us english',
+];
+
+function loadVoices(): void {
+  if (!synth) return;
+  voices = synth.getVoices();
+  const en = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith('en'));
+  // First a name that looks female, otherwise any English voice.
+  preferredVoice =
+    FEMALE_EN_HINTS.map((hint) => en.find((v) => v.name.toLowerCase().includes(hint))).find(
+      (v): v is SpeechSynthesisVoice => Boolean(v)
+    ) ??
+    en[0] ??
+    null;
+}
 
 export function initializeVoice(): void {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     synth = window.speechSynthesis;
+    loadVoices();
+    // Voice list often loads asynchronously; refresh when it becomes available.
+    synth.onvoiceschanged = loadVoices;
   }
 }
 
@@ -29,16 +57,15 @@ export function speak(message: VoiceMessage): Promise<void> {
 
     currentUtterance = new SpeechSynthesisUtterance(message.text);
     currentUtterance.rate = 0.95;
-    currentUtterance.pitch = 1.0;
+    // A slightly higher pitch keeps a warm, feminine tone on generic voices.
+    currentUtterance.pitch = 1.1;
     currentUtterance.volume = 1.0;
 
-    // Set language for the utterance
-    const lang = message.lang || 'en';
-    if (lang === 'hi') {
-      currentUtterance.lang = 'hi-IN'; // Hindi (India)
-    } else {
-      currentUtterance.lang = 'en-US'; // English (US)
-    }
+    // The coach always speaks in a female English voice. Pick it lazily in case
+    // the voice list wasn't ready at init time.
+    if (!preferredVoice) loadVoices();
+    if (preferredVoice) currentUtterance.voice = preferredVoice;
+    currentUtterance.lang = preferredVoice?.lang || 'en-US';
 
     currentUtterance.onend = () => {
       resolve();

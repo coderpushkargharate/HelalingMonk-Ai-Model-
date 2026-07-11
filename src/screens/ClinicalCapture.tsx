@@ -3,6 +3,8 @@ import { openCamera } from '../lib/camera';
 import { initializePoseLandmarker, detectPose, Landmark } from '../lib/poseDetection';
 import { computePostureChain, PostureChain } from '../lib/postureVisualizer';
 import { computeClinicalPlumbLine, drawClinicalPlumbLine, ClinicalPlumbLine } from '../lib/plumbLine';
+import { computeGuidance, drawGuidanceOverlay, Guidance } from '../lib/captureGuidance';
+import { speak, stopSpeech, initializeVoice } from '../lib/voiceService';
 import {
   ClinicalAssessment,
   AssessmentCapture,
@@ -11,7 +13,10 @@ import {
   SEVERITY_COLOR,
   SEVERITY_LABEL,
 } from '../lib/clinicalKnowledge';
-import { Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, SwitchCamera, Plus, X, Images } from 'lucide-react';
+import {
+  Camera, ChevronLeft, ChevronRight, CheckCircle2, RotateCcw, SwitchCamera, Plus, X, Images,
+  Volume2, VolumeX, ArrowLeft, ArrowRight, MoveHorizontal,
+} from 'lucide-react';
 
 interface Props {
   assessments: ClinicalAssessment[];
@@ -47,6 +52,8 @@ const CLINICAL_POINTS = new Set<number>([
 export default function ClinicalCapture({ assessments, onComplete, onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Separate overlay for the guidance arrow so it is NEVER baked into a capture.
+  const guideCanvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>();
   const latestLandmarks = useRef<Landmark[] | null>(null);
   // Latest plumb-line result for the frame on screen, so a capture stores the
@@ -61,13 +68,22 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   const [status, setStatus] = useState('Loading pose model...');
   const [live, setLive] = useState<MeasureResult | null>(null);
   const [livePosture, setLivePosture] = useState<PostureChain | null>(null);
-  const [livePlumb, setLivePlumb] = useState<ClinicalPlumbLine | null>(null);
   const [bodyDetected, setBodyDetected] = useState(false);
   const [flash, setFlash] = useState(false);
   const [captures, setCaptures] = useState<Record<string, AssessmentCapture>>({});
   // Extra free-angle photos (multiple per pose allowed) — appended, never
   // overwritten, so the doctor can document a posture from many angles.
   const [extraShots, setExtraShots] = useState<ExtraShot[]>([]);
+
+  // Live positioning coach: spoken cues (female English voice) + on-screen arrow.
+  const [guidance, setGuidance] = useState<Guidance | null>(null);
+  const [voiceOn, setVoiceOn] = useState(true);
+  // Ref so the animation loop (a stable closure) reads the latest setting.
+  const voiceOnRef = useRef(voiceOn);
+  voiceOnRef.current = voiceOn;
+  const lastStatusRef = useRef<string>('');
+  const lastSpeakRef = useRef(0);
+  const spokenPoseRef = useRef<number>(-1);
 
   const current = assessments[index];
   // Keep a ref of the active assessment so the animation loop always measures
@@ -116,6 +132,7 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
   };
 
   useEffect(() => {
+    initializeVoice();
     const setup = async () => {
       // Open the camera FIRST so the live preview appears instantly, then load
       // the (multi-MB) pose model in parallel. The render loop safely returns no
@@ -142,9 +159,39 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
+      stopSpeech();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Speak the current pose's instruction ("stand sideways…") whenever the pose
+  // changes (or when voice is switched on), so the user knows what to do.
+  useEffect(() => {
+    if (!ready || !voiceOn) return;
+    if (spokenPoseRef.current === index) return;
+    spokenPoseRef.current = index;
+    const a = assessments[index];
+    if (a) speak({ text: a.instruction, lang: 'en' });
+    // Hold off the next live positioning cue briefly so it doesn't cut off the
+    // instruction that just started playing.
+    lastSpeakRef.current = performance.now();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, ready, voiceOn]);
+
+  // React to a change in positioning status: update the banner and, if voice is
+  // on, speak the cue (throttled so it never chatters frame-to-frame).
+  const handleGuidance = (g: Guidance) => {
+    if (g.status === lastStatusRef.current) return;
+    lastStatusRef.current = g.status;
+    setGuidance(g);
+    if (voiceOnRef.current) {
+      const now = performance.now();
+      if (now - lastSpeakRef.current > 1400) {
+        lastSpeakRef.current = now;
+        speak({ text: g.en, lang: 'en' });
+      }
+    }
+  };
 
   const loop = async () => {
     const video = videoRef.current;
@@ -162,16 +209,21 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           setLivePosture(chain);
           const plumb = computeClinicalPlumbLine(result.landmarks, currentRef.current.view, aspect);
           latestPlumb.current = plumb;
-          setLivePlumb(plumb);
           drawScene(canvas, video, result.landmarks, measure, plumb);
+
+          // Live positioning coach: arrow overlay + spoken cue.
+          const g = computeGuidance(result.landmarks, plumb);
+          if (guideCanvasRef.current) drawGuidanceOverlay(guideCanvasRef.current, video, g);
+          handleGuidance(g);
         } else {
           latestLandmarks.current = null;
           latestPlumb.current = null;
           setBodyDetected(false);
           clearCanvas(canvas, video);
+          if (guideCanvasRef.current) drawGuidanceOverlay(guideCanvasRef.current, video, null);
           setLive(null);
           setLivePosture(null);
-          setLivePlumb(null);
+          handleGuidance({ status: 'no-body', en: 'Stand in front of the camera', hi: 'कैमरे के सामने खड़े हों', arrow: null, ready: false });
         }
       }
     } catch (err) {
@@ -412,6 +464,8 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
     <div className="min-h-screen bg-black flex flex-col relative">
       <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover absolute inset-0" />
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover" />
+      {/* Guidance arrow overlay — separate canvas, never captured into a photo. */}
+      <canvas ref={guideCanvasRef} className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none" />
 
       {/* Shutter flash on capture */}
       <div
@@ -419,23 +473,25 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
         style={{ opacity: flash ? 0.85 : 0 }}
       />
 
-      {/* Position verdict — driven by the plumb line. Tells the doctor/patient at
-          a glance whether the standing position is correct before capturing. */}
-      {bodyDetected && livePlumb && (
-        <div className="absolute top-36 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+      {/* Live positioning coach banner — the friendly text that pairs with the
+          spoken cue and the on-screen arrow. Green when ready, amber otherwise. */}
+      {bodyDetected && guidance && (
+        <div className="absolute top-32 left-1/2 -translate-x-1/2 z-20 pointer-events-none max-w-[92%]">
           <div
-            className={`px-4 py-2 rounded-full flex items-center gap-2 shadow-lg text-sm font-bold ${
-              livePlumb.aligned ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            className={`px-4 py-2 rounded-full flex items-center gap-2 shadow-lg text-sm font-bold text-white ${
+              guidance.ready ? 'bg-green-600' : 'bg-amber-500'
             }`}
           >
-            {livePlumb.aligned ? (
+            {guidance.arrow === 'left' ? (
+              <ArrowLeft className="w-4 h-4 animate-pulse" />
+            ) : guidance.arrow === 'right' ? (
+              <ArrowRight className="w-4 h-4 animate-pulse" />
+            ) : guidance.ready ? (
               <CheckCircle2 className="w-4 h-4" />
             ) : (
-              <RotateCcw className="w-4 h-4" />
+              <MoveHorizontal className="w-4 h-4" />
             )}
-            {livePlumb.aligned
-              ? 'Position correct · Sahi hai'
-              : `Adjust position · ${livePlumb.score.toFixed(0)}% off`}
+            {guidance.en}
           </div>
         </div>
       )}
@@ -450,6 +506,34 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
           <span className={`w-2 h-2 rounded-full ${bodyDetected ? 'bg-white' : 'bg-gray-400 animate-pulse'}`} />
           {bodyDetected ? 'Body detected · points live' : 'Stand in frame...'}
         </span>
+      </div>
+
+      {/* Voice guidance controls: mute/unmute + language, and repeat the
+          current pose's spoken instruction on demand. */}
+      <div className="absolute top-24 left-4 z-30 flex items-center gap-2">
+        <button
+          onClick={() => {
+            const next = !voiceOn;
+            setVoiceOn(next);
+            if (!next) stopSpeech();
+          }}
+          title={voiceOn ? 'Mute voice guidance' : 'Unmute voice guidance'}
+          className={`p-2.5 rounded-full shadow-lg ${voiceOn ? 'bg-emerald-600 text-white' : 'bg-black/70 text-gray-300'}`}
+        >
+          {voiceOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+        </button>
+        {voiceOn && (
+          <button
+            onClick={() => {
+              const a = assessments[index];
+              if (a) speak({ text: a.instruction, lang: 'en' });
+            }}
+            title="Repeat instruction"
+            className="px-3 py-2 rounded-full bg-black/70 text-white text-xs font-semibold shadow-lg"
+          >
+            Repeat
+          </button>
+        )}
       </div>
 
       {/* Front/back camera toggle — floats in the clear right-middle area so it
