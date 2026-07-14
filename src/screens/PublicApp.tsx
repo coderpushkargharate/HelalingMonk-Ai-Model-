@@ -1,9 +1,10 @@
-import { lazy, Suspense, useState } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useMemo, useState } from 'react';
+import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Stethoscope } from 'lucide-react';
 import MarketingLayout from '../components/site/MarketingLayout';
 import { CLINICAL_ASSESSMENTS } from '../lib/clinicalKnowledge';
-import type { PatientInfo, AssessmentCapture, ExtraShot } from '../lib/clinicalKnowledge';
+import type { PatientInfo } from '../lib/clinicalKnowledge';
+import { createStoredReport, getStoredReport, updateStoredReport } from '../lib/reportStore';
 
 // Route components are lazy-loaded so each screen ships in its own chunk. In
 // particular the capture/report screens (which pull in MediaPipe and jsPDF)
@@ -27,18 +28,71 @@ function RouteFallback() {
   );
 }
 
-// Overall doctor notes + key points for the public report. Kept on the client
-// and captured in the printed/PDF output (this guest flow has no saved DB
-// record to persist to — the per-posture scores work the same way).
-function DoctorNotesSection() {
-  const [notes, setNotes] = useState('');
-  const [points, setPoints] = useState<string[]>([]);
+// Loads a saved report by its URL id and renders it (doctor-editable). All
+// doctor edits are written straight back to localStorage under the same id, so
+// the report reopens exactly as it was left.
+function ReportRoute({ onRestart }: { onRestart: () => void }) {
+  const { id } = useParams<{ id: string }>();
+  // Read once per id; edits persist to storage and reload on the next visit.
+  const report = useMemo(() => (id ? getStoredReport(id) : null), [id]);
+
+  if (!id || !report) return <Navigate to="/assessment" replace />;
+
+  return (
+    <ClinicalReport
+      patient={report.patient}
+      captures={report.captures}
+      extraShots={report.extraShots}
+      onRestart={onRestart}
+      doctorMode
+      shareUrl={window.location.href}
+      doctorData={report.findingData}
+      onDoctorDataChange={(assessmentId, data) => {
+        const current = getStoredReport(id);
+        updateStoredReport(id, {
+          findingData: { ...(current?.findingData ?? {}), [assessmentId]: data },
+        });
+      }}
+      notesSection={
+        <DoctorNotesSection
+          reportId={id}
+          initialNotes={report.doctorNotes}
+          initialPoints={report.doctorPoints}
+        />
+      }
+    />
+  );
+}
+
+// Overall doctor notes + key points for the report. Edits are persisted to the
+// stored report (localStorage) so they survive a refresh and reopen later. The
+// per-posture scores persist the same way.
+function DoctorNotesSection({
+  reportId,
+  initialNotes,
+  initialPoints,
+}: {
+  reportId: string;
+  initialNotes: string;
+  initialPoints: string[];
+}) {
+  const [notes, setNotes] = useState(initialNotes);
+  const [points, setPoints] = useState<string[]>(initialPoints);
   const [draft, setDraft] = useState('');
+
+  const saveNotes = (v: string) => {
+    setNotes(v);
+    updateStoredReport(reportId, { doctorNotes: v });
+  };
+  const savePoints = (next: string[]) => {
+    setPoints(next);
+    updateStoredReport(reportId, { doctorPoints: next });
+  };
 
   const addPoint = () => {
     const p = draft.trim();
     if (!p) return;
-    setPoints((prev) => [...prev, p]);
+    savePoints([...points, p]);
     setDraft('');
   };
 
@@ -54,7 +108,7 @@ function DoctorNotesSection() {
       <label className="block text-xs text-gray-600 mb-1">Clinical notes</label>
       <textarea
         value={notes}
-        onChange={(e) => setNotes(e.target.value)}
+        onChange={(e) => saveNotes(e.target.value)}
         placeholder="Add clinical notes, observations, and prescribed plan for this patient…"
         className="w-full min-h-[100px] border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
       />
@@ -68,7 +122,7 @@ function DoctorNotesSection() {
               <span className="flex-1">{p}</span>
               <button
                 type="button"
-                onClick={() => setPoints((prev) => prev.filter((_, idx) => idx !== i))}
+                onClick={() => savePoints(points.filter((_, idx) => idx !== i))}
                 className="text-xs text-red-500 hover:text-red-700 print:hidden"
                 aria-label="Remove point"
               >
@@ -110,14 +164,10 @@ export default function PublicApp() {
   const navigate = useNavigate();
   const [patient, setPatient] = useState<PatientInfo | null>(null);
   const [assessmentIds, setAssessmentIds] = useState<string[]>([]);
-  const [captures, setCaptures] = useState<AssessmentCapture[]>([]);
-  const [extraShots, setExtraShots] = useState<ExtraShot[]>([]);
 
   const restart = () => {
     setPatient(null);
     setAssessmentIds([]);
-    setCaptures([]);
-    setExtraShots([]);
     navigate('/');
   };
 
@@ -170,9 +220,14 @@ export default function PublicApp() {
                   assessments={CLINICAL_ASSESSMENTS.filter((a) => assessmentIds.includes(a.id))}
                   onBack={() => navigate('/assessment/positions')}
                   onComplete={(caps, extras) => {
-                    setCaptures(caps);
-                    setExtraShots(extras);
-                    navigate('/assessment/report');
+                    if (!patient) {
+                      navigate('/assessment');
+                      return;
+                    }
+                    // Persist the report and open it at its own permanent URL,
+                    // so it can be revisited later on this device.
+                    const id = createStoredReport({ patient, captures: caps, extraShots: extras });
+                    navigate(`/assessment/report/${id}`);
                   }}
                 />
               ) : (
@@ -181,23 +236,10 @@ export default function PublicApp() {
             }
           />
 
-          <Route
-            path="assessment/report"
-            element={
-              patient && captures.length > 0 ? (
-                <ClinicalReport
-                  patient={patient}
-                  captures={captures}
-                  extraShots={extraShots}
-                  onRestart={restart}
-                  doctorMode
-                  notesSection={<DoctorNotesSection />}
-                />
-              ) : (
-                <Navigate to="/assessment" replace />
-              )
-            }
-          />
+          {/* Each generated report lives at its own permanent URL. */}
+          <Route path="assessment/report/:id" element={<ReportRoute onRestart={restart} />} />
+          {/* Legacy/bare report URL — nothing to show without an id. */}
+          <Route path="assessment/report" element={<Navigate to="/assessment" replace />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

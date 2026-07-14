@@ -13,8 +13,9 @@ import {
 } from '../lib/clinicalKnowledge';
 import PoseIllustration from '../components/PoseIllustration';
 import { useState, ReactNode } from 'react';
-import { FileText, Printer, RotateCcw, Activity, AlertTriangle, Stethoscope, ShieldAlert, Download } from 'lucide-react';
+import { FileText, Printer, RotateCcw, Activity, AlertTriangle, Stethoscope, ShieldAlert, Download, Link2, Check } from 'lucide-react';
 import { downloadReportPdf } from '../lib/reportPdf';
+import type { DoctorFindingData } from '../lib/reportStore';
 
 interface Props {
   patient: PatientInfo;
@@ -28,6 +29,12 @@ interface Props {
   notesSection?: ReactNode;
   /** Doctor flow: show the per-posture score/remarks block and editable exercises. */
   doctorMode?: boolean;
+  /** Persisted per-posture doctor input, keyed by assessmentId (restores on reopen). */
+  doctorData?: Record<string, DoctorFindingData>;
+  /** Called whenever a posture's doctor score/remarks/exercises change, so they can be saved. */
+  onDoctorDataChange?: (assessmentId: string, data: DoctorFindingData) => void;
+  /** When set, shows a "Copy link" button so the report's permanent URL can be shared/revisited. */
+  shareUrl?: string;
 }
 
 const SEVERITY_SCORE: Record<Severity, number> = { normal: 0, mild: 1, moderate: 2, severe: 3 };
@@ -40,7 +47,7 @@ const VIEW_LABEL: Record<View, string> = {
   back: 'Back View',
 };
 
-export default function ClinicalReport({ patient, captures, extraShots = [], onRestart, restartLabel, notesSection, doctorMode = false }: Props) {
+export default function ClinicalReport({ patient, captures, extraShots = [], onRestart, restartLabel, notesSection, doctorMode = false, doctorData, onDoctorDataChange, shareUrl }: Props) {
   const [downloading, setDownloading] = useState(false);
 
   // One-click PDF download. Composed programmatically for a crisp, consistent
@@ -100,6 +107,7 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
             <FileText className="w-6 h-6 text-emerald-600" /> Assessment Report
           </h1>
           <div className="flex gap-2">
+            {shareUrl && <CopyLinkButton url={shareUrl} />}
             <button
               onClick={handleDownload}
               disabled={downloading}
@@ -237,7 +245,14 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
                     </h3>
                     <div className="space-y-5">
                       {group.map(({ capture, assessment }) => (
-                        <FindingCard key={assessment.id} capture={capture} assessment={assessment} doctorMode={doctorMode} />
+                        <FindingCard
+                          key={assessment.id}
+                          capture={capture}
+                          assessment={assessment}
+                          doctorMode={doctorMode}
+                          initialDoctorData={doctorData?.[assessment.id]}
+                          onDoctorDataChange={onDoctorDataChange}
+                        />
                       ))}
                     </div>
                   </div>
@@ -281,10 +296,14 @@ function FindingCard({
   capture,
   assessment,
   doctorMode,
+  initialDoctorData,
+  onDoctorDataChange,
 }: {
   capture: AssessmentCapture;
   assessment: ClinicalAssessment;
   doctorMode: boolean;
+  initialDoctorData?: DoctorFindingData;
+  onDoctorDataChange?: (assessmentId: string, data: DoctorFindingData) => void;
 }) {
   const sev = capture.severity;
   const color = sev ? SEVERITY_COLOR[sev] : '#9ca3af';
@@ -292,12 +311,23 @@ function FindingCard({
 
   // Doctor-entered fields for this posture. Kept on the client and captured in
   // the printed/PDF report; not sent to the AI (the doctor's score overrides it).
-  const [docScore, setDocScore] = useState<number | null>(null);
-  const [docRemarks, setDocRemarks] = useState('');
+  // Initialised from any previously-saved values so a reopened report is intact.
+  const [docScore, setDocScore] = useState<number | null>(initialDoctorData?.score ?? null);
+  const [docRemarks, setDocRemarks] = useState(initialDoctorData?.remarks ?? '');
   // Auto exercises are the starting suggestion; the doctor edits/adds their own.
   const [docExercises, setDocExercises] = useState(
-    assessment.exercises.map((ex) => `${ex.name} — ${ex.sets} sets × ${ex.reps} · ${ex.frequency}`).join('\n')
+    initialDoctorData?.exercises ??
+      assessment.exercises.map((ex) => `${ex.name} — ${ex.sets} sets × ${ex.reps} · ${ex.frequency}`).join('\n')
   );
+
+  // Notify the parent (which persists) whenever any doctor field changes.
+  const emitChange = (next: Partial<DoctorFindingData>) => {
+    onDoctorDataChange?.(assessment.id, {
+      score: next.score !== undefined ? next.score : docScore,
+      remarks: next.remarks !== undefined ? next.remarks : docRemarks,
+      exercises: next.exercises !== undefined ? next.exercises : docExercises,
+    });
+  };
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden break-inside-avoid">
@@ -450,7 +480,11 @@ function FindingCard({
               <button
                 key={n}
                 type="button"
-                onClick={() => setDocScore(docScore === n ? null : n)}
+                onClick={() => {
+                  const next = docScore === n ? null : n;
+                  setDocScore(next);
+                  emitChange({ score: next });
+                }}
                 className={`w-7 h-7 rounded-md text-xs font-semibold border transition-colors ${
                   docScore === n
                     ? 'bg-blue-600 text-white border-blue-600'
@@ -472,7 +506,10 @@ function FindingCard({
         </label>
         <textarea
           value={docRemarks}
-          onChange={(e) => setDocRemarks(e.target.value)}
+          onChange={(e) => {
+            setDocRemarks(e.target.value);
+            emitChange({ remarks: e.target.value });
+          }}
           placeholder="Doctor's observations, remarks, and why this score was given…"
           className="w-full min-h-[70px] border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
         />
@@ -494,7 +531,10 @@ function FindingCard({
           </p>
           <textarea
             value={docExercises}
-            onChange={(e) => setDocExercises(e.target.value)}
+            onChange={(e) => {
+              setDocExercises(e.target.value);
+              emitChange({ exercises: e.target.value });
+            }}
             placeholder="One exercise per line — e.g. Chin Tucks — 3 sets × 10 · Daily"
             className="w-full min-h-[80px] border border-amber-200 rounded-lg p-2 text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
           />
@@ -588,6 +628,30 @@ function DeviationGauge({
         <span>{max}{unit}</span>
       </div>
     </div>
+  );
+}
+
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard blocked (e.g. insecure context) — fall back to a prompt.
+      window.prompt('Copy this report link:', url);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button
+      onClick={copy}
+      title={url}
+      className="rounded-full border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-4 py-2 flex items-center gap-2 text-sm font-medium transition-colors shadow-sm"
+    >
+      {copied ? <Check className="w-4 h-4" /> : <Link2 className="w-4 h-4" />}
+      {copied ? 'Link copied' : 'Copy link'}
+    </button>
   );
 }
 
