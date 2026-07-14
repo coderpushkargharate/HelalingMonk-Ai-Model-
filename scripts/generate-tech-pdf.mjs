@@ -233,56 +233,58 @@ function assessmentTable(rows) {
 // ---- The 33 points: index → name → body part → clinical use ----
 // Names are exactly MediaPipe's (see LANDMARK_NAMES in poseDetection.ts); the
 // "marked on / used for" column reflects how each point is used in this app.
+// [index, name, body part (Eng), Hindi (romanized), marked on / used for]
 const LANDMARKS = [
-  [0, 'nose', 'Head', 'Head centre — forward-head check & side-view facing direction'],
-  [1, 'left_eye_inner', 'Head', 'Eye landmark — helps estimate vertex (top of head)'],
-  [2, 'left_eye', 'Head', 'Left eye — head tilt & vertex estimate'],
-  [3, 'left_eye_outer', 'Head', 'Outer eye corner'],
-  [4, 'right_eye_inner', 'Head', 'Eye landmark'],
-  [5, 'right_eye', 'Head', 'Right eye — head tilt & vertex estimate'],
-  [6, 'right_eye_outer', 'Head', 'Outer eye corner'],
-  [7, 'left_ear', 'Head', 'Left ear (EAM) — craniovertebral angle & side plumb ear point'],
-  [8, 'right_ear', 'Head', 'Right ear (EAM) — craniovertebral angle & side plumb'],
-  [9, 'mouth_left', 'Head', 'Mouth corner — used to estimate the chin point'],
-  [10, 'mouth_right', 'Head', 'Mouth corner — used to estimate the chin point'],
-  [11, 'left_shoulder', 'Shoulder / torso', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
-  [12, 'right_shoulder', 'Shoulder / torso', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
-  [13, 'left_elbow', 'Arm', 'Elbow — elbow flexion & shoulder ROM vertex'],
-  [14, 'right_elbow', 'Arm', 'Elbow — elbow flexion & shoulder ROM vertex'],
-  [15, 'left_wrist', 'Arm', 'Wrist — upper-limb ROM endpoint'],
-  [16, 'right_wrist', 'Arm', 'Wrist — upper-limb ROM endpoint'],
-  [17, 'left_pinky', 'Hand', 'Little-finger knuckle'],
-  [18, 'right_pinky', 'Hand', 'Little-finger knuckle'],
-  [19, 'left_index', 'Hand', 'Index finger — reach / hand endpoint'],
-  [20, 'right_index', 'Hand', 'Index finger — reach / hand endpoint'],
-  [21, 'left_thumb', 'Hand', 'Thumb'],
-  [22, 'right_thumb', 'Hand', 'Thumb'],
-  [23, 'left_hip', 'Pelvis', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
-  [24, 'right_hip', 'Pelvis', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
-  [25, 'left_knee', 'Leg', 'Knee — knee alignment/flexion, squat depth, plumb line'],
-  [26, 'right_knee', 'Leg', 'Knee — knee alignment/flexion, squat depth, plumb line'],
-  [27, 'left_ankle', 'Leg', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
-  [28, 'right_ankle', 'Leg', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
-  [29, 'left_heel', 'Foot', 'Heel — foot alignment & ankle ROM'],
-  [30, 'right_heel', 'Foot', 'Heel — foot alignment & ankle ROM'],
-  [31, 'left_foot_index', 'Foot', 'Toe — foot direction & dorsiflexion'],
-  [32, 'right_foot_index', 'Foot', 'Toe — foot direction & dorsiflexion'],
+  [0, 'nose', 'Head', 'Naak', 'Head centre — forward-head check & side-view facing direction'],
+  [1, 'left_eye_inner', 'Head', 'Baayi aankh (andar)', 'Eye landmark — helps estimate vertex (top of head)'],
+  [2, 'left_eye', 'Head', 'Baayi aankh', 'Left eye — head tilt & vertex estimate'],
+  [3, 'left_eye_outer', 'Head', 'Baayi aankh (bahar)', 'Outer eye corner'],
+  [4, 'right_eye_inner', 'Head', 'Daayi aankh (andar)', 'Eye landmark'],
+  [5, 'right_eye', 'Head', 'Daayi aankh', 'Right eye — head tilt & vertex estimate'],
+  [6, 'right_eye_outer', 'Head', 'Daayi aankh (bahar)', 'Outer eye corner'],
+  [7, 'left_ear', 'Head', 'Bayan kaan', 'Left ear (EAM) — craniovertebral angle & side plumb ear point'],
+  [8, 'right_ear', 'Head', 'Dayan kaan', 'Right ear (EAM) — craniovertebral angle & side plumb'],
+  [9, 'mouth_left', 'Head', 'Munh (bayan)', 'Mouth corner — used to estimate the chin point'],
+  [10, 'mouth_right', 'Head', 'Munh (dayan)', 'Mouth corner — used to estimate the chin point'],
+  [11, 'left_shoulder', 'Shoulder / torso', 'Bayan kandha', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
+  [12, 'right_shoulder', 'Shoulder / torso', 'Dayan kandha', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
+  [13, 'left_elbow', 'Arm', 'Baayi kohni', 'Elbow — elbow flexion & shoulder ROM vertex'],
+  [14, 'right_elbow', 'Arm', 'Daayi kohni', 'Elbow — elbow flexion & shoulder ROM vertex'],
+  [15, 'left_wrist', 'Arm', 'Baayi kalaai', 'Wrist — upper-limb ROM endpoint'],
+  [16, 'right_wrist', 'Arm', 'Daayi kalaai', 'Wrist — upper-limb ROM endpoint'],
+  [17, 'left_pinky', 'Hand', 'Baayi choti ungli', 'Little-finger knuckle'],
+  [18, 'right_pinky', 'Hand', 'Daayi choti ungli', 'Little-finger knuckle'],
+  [19, 'left_index', 'Hand', 'Baayi tarjani', 'Index finger — reach / hand endpoint'],
+  [20, 'right_index', 'Hand', 'Daayi tarjani', 'Index finger — reach / hand endpoint'],
+  [21, 'left_thumb', 'Hand', 'Bayan angutha', 'Thumb'],
+  [22, 'right_thumb', 'Hand', 'Dayan angutha', 'Thumb'],
+  [23, 'left_hip', 'Pelvis', 'Bayan koolha', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
+  [24, 'right_hip', 'Pelvis', 'Dayan koolha', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
+  [25, 'left_knee', 'Leg', 'Bayan ghutna', 'Knee — knee alignment/flexion, squat depth, plumb line'],
+  [26, 'right_knee', 'Leg', 'Dayan ghutna', 'Knee — knee alignment/flexion, squat depth, plumb line'],
+  [27, 'left_ankle', 'Leg', 'Bayan takhna', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
+  [28, 'right_ankle', 'Leg', 'Dayan takhna', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
+  [29, 'left_heel', 'Foot', 'Baayi edi', 'Heel — foot alignment & ankle ROM'],
+  [30, 'right_heel', 'Foot', 'Daayi edi', 'Heel — foot alignment & ankle ROM'],
+  [31, 'left_foot_index', 'Foot', 'Bayan pair ka angutha', 'Toe — foot direction & dorsiflexion'],
+  [32, 'right_foot_index', 'Foot', 'Dayan pair ka angutha', 'Toe — foot direction & dorsiflexion'],
 ];
 
 // Full-width reference table for the 33 landmarks (paginates, header repeats).
 function landmarkTable() {
   const cols = [
-    { w: 24, head: '#' },
-    { w: 96, head: 'Point name' },
-    { w: 82, head: 'Body part' },
-    { w: CONTENT_W - 24 - 96 - 82, head: 'Marked on / used for' },
+    { w: 20, head: '#' },
+    { w: 82, head: 'Point name' },
+    { w: 66, head: 'Body part' },
+    { w: 96, head: 'Hindi (naam)' },
+    { w: CONTENT_W - 20 - 82 - 66 - 96, head: 'Marked on / used for' },
   ];
   const rh = 18;
   const header = () => {
     setFill(EMERALD);
     doc.rect(M, y - 12, CONTENT_W, 18, 'F');
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.6);
+    doc.setFontSize(8.4);
     doc.setTextColor(255, 255, 255);
     let cx = M + 5;
     for (const c of cols) { doc.text(c.head, cx, y); cx += c.w; }
@@ -292,13 +294,13 @@ function landmarkTable() {
   LANDMARKS.forEach((r, i) => {
     if (y + rh > PAGE_H - M) { footer(); doc.addPage(); y = M; header(); }
     if (i % 2 === 0) { setFill(LIGHT); doc.rect(M, y - 12, CONTENT_W, rh, 'F'); }
-    const cells = [String(r[0]), r[1], r[2], r[3]];
+    const cells = [String(r[0]), r[1], r[2], r[3], r[4]];
     let cx = M + 5;
-    doc.setFontSize(8.3);
+    doc.setFontSize(8.1);
     let maxLines = 1;
     cells.forEach((val, ci) => {
-      doc.setFont('helvetica', ci === 1 ? 'bold' : 'normal');
-      setColor(ci === 0 ? EMERALD : [51, 65, 85]);
+      doc.setFont('helvetica', ci === 1 || ci === 3 ? 'bold' : 'normal');
+      setColor(ci === 0 ? EMERALD : ci === 3 ? [124, 58, 237] : [51, 65, 85]);
       const lines = doc.splitTextToSize(val, cols[ci].w - 6);
       maxLines = Math.max(maxLines, lines.length);
       doc.text(lines, cx, y);
@@ -330,9 +332,9 @@ const CONNECTIONS = [
 ];
 
 function bodyDiagram() {
-  const boxW = 250;
-  const boxH = 300;
-  ensure(boxH + 10);
+  const boxW = 300;
+  const boxH = 360;
+  ensure(boxH + 14);
   const x0 = M + 6;
   const y0 = y;
   const px = (nx) => x0 + nx * boxW;
@@ -344,26 +346,29 @@ function bodyDiagram() {
 
   // skeleton connections
   setDraw(EMERALD);
-  doc.setLineWidth(1.4);
+  doc.setLineWidth(2);
   for (const [a, b] of CONNECTIONS) {
     doc.line(px(LM[a][0]), py(LM[a][1]), px(LM[b][0]), py(LM[b][1]));
   }
   // plumb reference (dashed vertical through centre)
   setDraw([148, 163, 184]);
-  doc.setLineWidth(0.8);
-  doc.setLineDashPattern([3, 3], 0);
+  doc.setLineWidth(1);
+  doc.setLineDashPattern([4, 3], 0);
   doc.line(px(0.5), py(0.03), px(0.5), py(0.9));
   doc.setLineDashPattern([], 0);
 
   // landmark dots + index numbers
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(5.6);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
   for (let i = 0; i <= 32; i++) {
     const [nx, ny] = LM[i];
     setFill(DARK);
-    doc.circle(px(nx), py(ny), 2.1, 'F');
+    doc.circle(px(nx), py(ny), 2.9, 'F');
+    // white halo behind the number so it stays legible over skeleton lines
+    doc.setTextColor(255, 255, 255);
+    doc.text(String(i), px(nx) + 3.6, py(ny) - 2.4);
     setColor(EMERALD);
-    doc.text(String(i), px(nx) + 3, py(ny) - 2);
+    doc.text(String(i), px(nx) + 3.2, py(ny) - 2.6);
   }
 
   // side legend
