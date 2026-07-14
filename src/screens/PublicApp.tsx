@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Stethoscope } from 'lucide-react';
 import MarketingLayout from '../components/site/MarketingLayout';
 import { CLINICAL_ASSESSMENTS } from '../lib/clinicalKnowledge';
 import type { PatientInfo, AssessmentCapture, ExtraShot } from '../lib/clinicalKnowledge';
@@ -23,6 +24,82 @@ function RouteFallback() {
     <div className="flex min-h-screen items-center justify-center bg-[#f6faf8]">
       <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-500" />
     </div>
+  );
+}
+
+// Overall doctor notes + key points for the public report. Kept on the client
+// and captured in the printed/PDF output (this guest flow has no saved DB
+// record to persist to — the per-posture scores work the same way).
+function DoctorNotesSection() {
+  const [notes, setNotes] = useState('');
+  const [points, setPoints] = useState<string[]>([]);
+  const [draft, setDraft] = useState('');
+
+  const addPoint = () => {
+    const p = draft.trim();
+    if (!p) return;
+    setPoints((prev) => [...prev, p]);
+    setDraft('');
+  };
+
+  return (
+    <section className="mt-8 border-t border-gray-200 pt-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Stethoscope className="w-4 h-4 text-blue-700" />
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Doctor Notes &amp; Key Points</h2>
+        <span className="ml-auto text-[10px] text-blue-500 font-medium print:hidden">To be filled by the doctor</span>
+      </div>
+
+      {/* Overall clinical notes */}
+      <label className="block text-xs text-gray-600 mb-1">Clinical notes</label>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Add clinical notes, observations, and prescribed plan for this patient…"
+        className="w-full min-h-[100px] border border-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+      />
+
+      {/* Key points list */}
+      <label className="block text-xs text-gray-600 mt-4 mb-1">Key points</label>
+      {points.length > 0 && (
+        <ul className="list-disc pl-5 mb-2 space-y-1">
+          {points.map((p, i) => (
+            <li key={i} className="text-sm text-gray-800 flex items-start gap-2">
+              <span className="flex-1">{p}</span>
+              <button
+                type="button"
+                onClick={() => setPoints((prev) => prev.filter((_, idx) => idx !== i))}
+                className="text-xs text-red-500 hover:text-red-700 print:hidden"
+                aria-label="Remove point"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2 print:hidden">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addPoint();
+            }
+          }}
+          placeholder="Add a key point and press Enter…"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+        />
+        <button
+          type="button"
+          onClick={addPoint}
+          className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2 transition-colors"
+        >
+          Add point
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -113,6 +190,8 @@ export default function PublicApp() {
                   captures={captures}
                   extraShots={extraShots}
                   onRestart={restart}
+                  doctorMode
+                  notesSection={<DoctorNotesSection />}
                 />
               ) : (
                 <Navigate to="/assessment" replace />
