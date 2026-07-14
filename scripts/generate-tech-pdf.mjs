@@ -230,6 +230,85 @@ function assessmentTable(rows) {
   y += 6;
 }
 
+// ---- The 33 points: index → name → body part → clinical use ----
+// Names are exactly MediaPipe's (see LANDMARK_NAMES in poseDetection.ts); the
+// "marked on / used for" column reflects how each point is used in this app.
+const LANDMARKS = [
+  [0, 'nose', 'Head', 'Head centre — forward-head check & side-view facing direction'],
+  [1, 'left_eye_inner', 'Head', 'Eye landmark — helps estimate vertex (top of head)'],
+  [2, 'left_eye', 'Head', 'Left eye — head tilt & vertex estimate'],
+  [3, 'left_eye_outer', 'Head', 'Outer eye corner'],
+  [4, 'right_eye_inner', 'Head', 'Eye landmark'],
+  [5, 'right_eye', 'Head', 'Right eye — head tilt & vertex estimate'],
+  [6, 'right_eye_outer', 'Head', 'Outer eye corner'],
+  [7, 'left_ear', 'Head', 'Left ear (EAM) — craniovertebral angle & side plumb ear point'],
+  [8, 'right_ear', 'Head', 'Right ear (EAM) — craniovertebral angle & side plumb'],
+  [9, 'mouth_left', 'Head', 'Mouth corner — used to estimate the chin point'],
+  [10, 'mouth_right', 'Head', 'Mouth corner — used to estimate the chin point'],
+  [11, 'left_shoulder', 'Shoulder / torso', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
+  [12, 'right_shoulder', 'Shoulder / torso', 'Acromion — shoulder level, plumb line, arm-ROM origin'],
+  [13, 'left_elbow', 'Arm', 'Elbow — elbow flexion & shoulder ROM vertex'],
+  [14, 'right_elbow', 'Arm', 'Elbow — elbow flexion & shoulder ROM vertex'],
+  [15, 'left_wrist', 'Arm', 'Wrist — upper-limb ROM endpoint'],
+  [16, 'right_wrist', 'Arm', 'Wrist — upper-limb ROM endpoint'],
+  [17, 'left_pinky', 'Hand', 'Little-finger knuckle'],
+  [18, 'right_pinky', 'Hand', 'Little-finger knuckle'],
+  [19, 'left_index', 'Hand', 'Index finger — reach / hand endpoint'],
+  [20, 'right_index', 'Hand', 'Index finger — reach / hand endpoint'],
+  [21, 'left_thumb', 'Hand', 'Thumb'],
+  [22, 'right_thumb', 'Hand', 'Thumb'],
+  [23, 'left_hip', 'Pelvis', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
+  [24, 'right_hip', 'Pelvis', 'Hip / ASIS — pelvic tilt, trunk & hip ROM, plumb line'],
+  [25, 'left_knee', 'Leg', 'Knee — knee alignment/flexion, squat depth, plumb line'],
+  [26, 'right_knee', 'Leg', 'Knee — knee alignment/flexion, squat depth, plumb line'],
+  [27, 'left_ankle', 'Leg', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
+  [28, 'right_ankle', 'Leg', 'Ankle (lateral malleolus) — plumb base & dorsiflexion'],
+  [29, 'left_heel', 'Foot', 'Heel — foot alignment & ankle ROM'],
+  [30, 'right_heel', 'Foot', 'Heel — foot alignment & ankle ROM'],
+  [31, 'left_foot_index', 'Foot', 'Toe — foot direction & dorsiflexion'],
+  [32, 'right_foot_index', 'Foot', 'Toe — foot direction & dorsiflexion'],
+];
+
+// Full-width reference table for the 33 landmarks (paginates, header repeats).
+function landmarkTable() {
+  const cols = [
+    { w: 24, head: '#' },
+    { w: 96, head: 'Point name' },
+    { w: 82, head: 'Body part' },
+    { w: CONTENT_W - 24 - 96 - 82, head: 'Marked on / used for' },
+  ];
+  const rh = 18;
+  const header = () => {
+    setFill(EMERALD);
+    doc.rect(M, y - 12, CONTENT_W, 18, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.6);
+    doc.setTextColor(255, 255, 255);
+    let cx = M + 5;
+    for (const c of cols) { doc.text(c.head, cx, y); cx += c.w; }
+    y += 14;
+  };
+  header();
+  LANDMARKS.forEach((r, i) => {
+    if (y + rh > PAGE_H - M) { footer(); doc.addPage(); y = M; header(); }
+    if (i % 2 === 0) { setFill(LIGHT); doc.rect(M, y - 12, CONTENT_W, rh, 'F'); }
+    const cells = [String(r[0]), r[1], r[2], r[3]];
+    let cx = M + 5;
+    doc.setFontSize(8.3);
+    let maxLines = 1;
+    cells.forEach((val, ci) => {
+      doc.setFont('helvetica', ci === 1 ? 'bold' : 'normal');
+      setColor(ci === 0 ? EMERALD : [51, 65, 85]);
+      const lines = doc.splitTextToSize(val, cols[ci].w - 6);
+      maxLines = Math.max(maxLines, lines.length);
+      doc.text(lines, cx, y);
+      cx += cols[ci].w;
+    });
+    y += Math.max(rh, maxLines * 9.5 + 7);
+  });
+  y += 6;
+}
+
 // ---- 33-landmark body diagram (drawn as vectors) ----
 // Approximate front-view layout in a normalized 0..1 box; indices match
 // MediaPipe Pose. Left_* placed on the drawing's left, right_* on the right.
@@ -401,14 +480,12 @@ bodyDiagram();
 para(
   'Every point is returned in normalized coordinates (0-1 across the frame), so the maths is resolution-independent. On the live view each point is drawn as a green dot and the joints are joined into a skeleton; the same overlay is "baked into" the captured photo so the doctor sees exactly what the model measured.'
 );
-h2('Named points used clinically');
-codeBlock([
-  '0  nose            11 left_shoulder   23 left_hip     27 left_ankle',
-  '2  left_eye        12 right_shoulder  24 right_hip    28 right_ankle',
-  '5  right_eye       13 left_elbow      25 left_knee    29 left_heel',
-  '7  left_ear        14 right_elbow     26 right_knee   31 left_foot_index',
-  '8  right_ear       15 left_wrist      ...            32 right_foot_index',
-]);
+h2('All 33 points — where each is marked & what it measures');
+para(
+  'The complete list below maps every landmark index to its name, the body part it is marked on, and how HealingMonk uses it. Use this as the quick reference when explaining the system.',
+  { size: 9.5 }
+);
+landmarkTable();
 para(
   'Visibility gate: any point whose visibility drops below 0.5 is treated as "not seen" and excluded, so a briefly hidden hand or foot can never pull a measurement to a wrong value. A live detection-quality indicator (visible points / 33) tells the patient when to reposition.'
 );
