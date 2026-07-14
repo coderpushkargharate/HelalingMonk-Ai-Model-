@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json"
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "pdf:tech": "node scripts/generate-tech-pdf.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.35",
