@@ -18,7 +18,9 @@ export interface AuthResult {
   permissions: string[];
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+// Same-origin API now that the backend lives in this Next.js app under /api.
+// Override with NEXT_PUBLIC_API_URL only if the API is hosted elsewhere.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 const TOKEN_KEY = 'hm_token';
 
 export function getToken(): string | null {

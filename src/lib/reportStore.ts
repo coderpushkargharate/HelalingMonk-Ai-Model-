@@ -9,7 +9,8 @@
 
 import type { PatientInfo, AssessmentCapture, ExtraShot } from './clinicalKnowledge';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+// Same-origin API now that the backend lives in this Next.js app under /api.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 /** A doctor's per-posture clinical input, persisted with the report. */
 export interface DoctorFindingData {
