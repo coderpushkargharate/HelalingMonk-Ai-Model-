@@ -1,4 +1,4 @@
-import { Landmark, calculateAngle2D } from './poseDetection';
+import { Landmark, calculateAngle2D } from '@/lib/poseDetection';
 
 /**
  * HealingMonk AI Clinical Knowledge Base.

@@ -1,5 +1,5 @@
-import { Landmark, calculateAngle2D } from './poseDetection';
-import { PosturePoint, analyzePostureVisually } from './postureVisualizer';
+import { Landmark, calculateAngle2D } from '@/lib/poseDetection';
+import { PosturePoint, analyzePostureVisually } from '@/lib/postureVisualizer';
 
 // Landmark indices we care about (MediaPipe Pose)
 const L = {

@@ -1,5 +1,5 @@
 import type { PoseLandmarker as PoseLandmarkerInstance } from '@mediapipe/tasks-vision';
-import { PoseSmoother } from './poseSmoothing';
+import { PoseSmoother } from '@/lib/poseSmoothing';
 
 let poseLandmarker: PoseLandmarkerInstance | null = null;
 

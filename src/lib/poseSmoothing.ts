@@ -1,4 +1,4 @@
-import { Landmark } from './poseDetection';
+import { Landmark } from '@/lib/poseDetection';
 
 /**
  * One-Euro filter for live pose landmarks.

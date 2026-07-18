@@ -1,5 +1,5 @@
-import { Landmark } from './poseDetection';
-import type { ClinicalPlumbLine } from './plumbLine';
+import { Landmark } from '@/lib/poseDetection';
+import type { ClinicalPlumbLine } from '@/lib/plumbLine';
 
 /**
  * Live positioning coach for the camera screen. Looks at the tracked body and

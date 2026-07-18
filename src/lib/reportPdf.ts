@@ -7,7 +7,7 @@ import {
   SEVERITY_COLOR,
   SEVERITY_LABEL,
   Severity,
-} from './clinicalKnowledge';
+} from '@/lib/clinicalKnowledge';
 
 /**
  * Build and download the clinical report as a real PDF file, composed directly

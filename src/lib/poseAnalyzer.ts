@@ -1,4 +1,4 @@
-import { Landmark, calculateAngle, calculateDistance, calculateAngle2D } from './poseDetection';
+import { Landmark, calculateAngle, calculateDistance, calculateAngle2D } from '@/lib/poseDetection';
 
 export interface PostureIssue {
   type: string;

@@ -2,8 +2,8 @@
 // Mirrors the scoring shown in ClinicalReport so the saved report matches
 // what the doctor sees on screen.
 
-import { AssessmentCapture, getAssessment, Severity } from './clinicalKnowledge';
-import { ReportFinding, ReportExercise, NewReport } from './auth';
+import { AssessmentCapture, getAssessment, Severity } from '@/lib/clinicalKnowledge';
+import { ReportFinding, ReportExercise, NewReport } from '@/services/api';
 
 const SEVERITY_SCORE: Record<Severity, number> = { normal: 0, mild: 1, moderate: 2, severe: 3 };
 

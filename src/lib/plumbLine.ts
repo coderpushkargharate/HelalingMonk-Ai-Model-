@@ -1,5 +1,5 @@
-import { Landmark } from './poseDetection';
-import type { Severity } from './clinicalKnowledge';
+import { Landmark } from '@/lib/poseDetection';
+import type { Severity } from '@/lib/clinicalKnowledge';
 
 /**
  * Clinical "Plumb Line" posture assessment.
