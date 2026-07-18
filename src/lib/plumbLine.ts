@@ -378,7 +378,11 @@ export function drawClinicalPlumbLine(
   ctx: CanvasRenderingContext2D,
   plumb: ClinicalPlumbLine,
   w: number,
-  h: number
+  h: number,
+  // When false, only the visual guides (lines, dots, connectors, symmetry bars)
+  // are drawn — no text labels. Used by the live capture view so the overlay on
+  // the person's body stays clean ("only AI", no writing).
+  showLabels = true
 ) {
   const lineX = plumb.lineX * w;
   const topY = plumb.topY * h;
@@ -436,16 +440,18 @@ export function drawClinicalPlumbLine(
   ctx.shadowBlur = 0;
 
   // View tag at the top of the line.
-  const tag =
-    plumb.view === 'front' ? 'PLUMB · FRONT' : plumb.view === 'back' ? 'PLUMB · BACK' : 'PLUMB · LATERAL';
-  ctx.font = 'bold 15px Arial';
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'left';
-  const tw = ctx.measureText(tag).width;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(lineX - tw / 2 - 6, Math.max(0, topY - 24), tw + 12, 22);
-  ctx.fillStyle = lineColor;
-  ctx.fillText(tag, lineX - tw / 2, Math.max(2, topY - 22));
+  if (showLabels) {
+    const tag =
+      plumb.view === 'front' ? 'PLUMB · FRONT' : plumb.view === 'back' ? 'PLUMB · BACK' : 'PLUMB · LATERAL';
+    ctx.font = 'bold 15px Arial';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const tw = ctx.measureText(tag).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(lineX - tw / 2 - 6, Math.max(0, topY - 24), tw + 12, 22);
+    ctx.fillStyle = lineColor;
+    ctx.fillText(tag, lineX - tw / 2, Math.max(2, topY - 22));
+  }
 
   // Anatomical checkpoints: connector from the line to the point + label.
   ctx.font = 'bold 13px Arial';
@@ -473,23 +479,25 @@ export function drawClinicalPlumbLine(
     ctx.stroke();
 
     // Label: name + signed deviation (or "on line").
-    const dirWord =
-      plumb.view === 'side'
-        ? p.offsetPct >= 0
-          ? 'ant'
-          : 'post'
-        : p.offsetPct >= 0
-          ? 'R'
-          : 'L';
-    const label = p.onLine ? p.name : `${p.name} ${Math.abs(p.offsetPct)}% ${dirWord}`;
-    const onRight = px >= lineX;
-    const labelW = ctx.measureText(label).width;
-    const lx = onRight ? px + 10 : px - 10 - labelW;
-    ctx.fillStyle = 'rgba(0,0,0,0.62)';
-    ctx.fillRect(lx - 4, py - 10, labelW + 8, 20);
-    ctx.fillStyle = color;
-    ctx.textAlign = 'left';
-    ctx.fillText(label, lx, py);
+    if (showLabels) {
+      const dirWord =
+        plumb.view === 'side'
+          ? p.offsetPct >= 0
+            ? 'ant'
+            : 'post'
+          : p.offsetPct >= 0
+            ? 'R'
+            : 'L';
+      const label = p.onLine ? p.name : `${p.name} ${Math.abs(p.offsetPct)}% ${dirWord}`;
+      const onRight = px >= lineX;
+      const labelW = ctx.measureText(label).width;
+      const lx = onRight ? px + 10 : px - 10 - labelW;
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.fillRect(lx - 4, py - 10, labelW + 8, 20);
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left';
+      ctx.fillText(label, lx, py);
+    }
   }
 
   // Front-view symmetry bars: left↔right level checks.
@@ -509,17 +517,19 @@ export function drawClinicalPlumbLine(
     ctx.stroke();
     ctx.setLineDash([]);
 
-    const label = s.level ? `${s.name} level` : `${s.name} ${s.tiltDeg}° (${s.higher} high)`;
-    ctx.font = 'bold 12px Arial';
-    const labelW = ctx.measureText(label).width;
-    const midX = (lx + rx) / 2 - labelW / 2;
-    const midY = (ly + ry) / 2 - 14;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(midX - 4, midY - 9, labelW + 8, 18);
-    ctx.fillStyle = color;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    ctx.fillText(label, midX, midY);
+    if (showLabels) {
+      const label = s.level ? `${s.name} level` : `${s.name} ${s.tiltDeg}° (${s.higher} high)`;
+      ctx.font = 'bold 12px Arial';
+      const labelW = ctx.measureText(label).width;
+      const midX = (lx + rx) / 2 - labelW / 2;
+      const midY = (ly + ry) / 2 - 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(midX - 4, midY - 9, labelW + 8, 18);
+      ctx.fillStyle = color;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.fillText(label, midX, midY);
+    }
   }
 
   ctx.restore();

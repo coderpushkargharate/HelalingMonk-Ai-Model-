@@ -299,41 +299,12 @@ export default function ClinicalCapture({ assessments, onComplete, onBack }: Pro
       ctx.stroke();
     }
 
-    // Clinical plumb line: the vertical reference plus the anatomical
-    // checkpoints it should pass through, and (front view) the left/right
-    // symmetry bars. Drawn here so its labels sit on top of the skeleton.
+    // Clinical plumb line: the vertical reference + anatomical checkpoints +
+    // (front view) symmetry bars — VISUAL guides only. Labels are suppressed
+    // (showLabels=false) so nothing is written over the person's body; only the
+    // AI pose skeleton + plumb guides show, live and in the captured image.
     if (plumb) {
-      drawClinicalPlumbLine(ctx, plumb, w, h);
-
-      // Aggregate alignment summary, top-centre.
-      const summary = plumb.aligned
-        ? 'Plumb line: aligned'
-        : `Plumb deviation: ${plumb.score.toFixed(1)}% · ${SEVERITY_LABEL[plumb.rating]}`;
-      ctx.font = 'bold 18px Arial';
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'left';
-      const sw = ctx.measureText(summary).width;
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
-      ctx.fillRect(w / 2 - sw / 2 - 8, 44, sw + 16, 28);
-      ctx.fillStyle = SEVERITY_COLOR[plumb.rating];
-      ctx.fillText(summary, w / 2 - sw / 2, 49);
-    }
-
-    // Measurement label near the first active landmark.
-    if (measure.value !== null && measure.points.length > 0) {
-      const anchor = lm[measure.points[0]];
-      if (anchor) {
-        const label = `${currentRef.current.measurementName}: ${measure.detail}`;
-        ctx.font = 'bold 26px Arial';
-        ctx.textBaseline = 'top';
-        const x = anchor.x * w + 14;
-        const y = anchor.y * h - 10;
-        const tw = ctx.measureText(label).width;
-        ctx.fillStyle = 'rgba(0,0,0,0.65)';
-        ctx.fillRect(x - 6, y - 6, tw + 12, 36);
-        ctx.fillStyle = sevColor;
-        ctx.fillText(label, x, y);
-      }
+      drawClinicalPlumbLine(ctx, plumb, w, h, false);
     }
   };
 
