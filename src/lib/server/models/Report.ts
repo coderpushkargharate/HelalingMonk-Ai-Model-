@@ -33,6 +33,9 @@ const reportSchema = new mongoose.Schema(
   {
     patient: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
     doctor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    // Slug of the public (no-auth) visual report in hm_public_reports, so this
+    // structured record links to a shareable, name-based `/r/:slug` URL.
+    shareId: { type: String, default: null, index: true },
     painAreas: { type: [String], default: [] },
     overallScore: { type: Number, default: null },
     findingsCount: { type: Number, default: 0 },
@@ -51,6 +54,7 @@ reportSchema.methods.toJSONSafe = function toJSONSafe(this: any) {
     doctor: this.doctor?._id
       ? { id: this.doctor._id.toString(), name: this.doctor.name }
       : this.doctor?.toString(),
+    shareId: this.shareId || null,
     painAreas: this.painAreas || [],
     overallScore: this.overallScore,
     findingsCount: this.findingsCount,

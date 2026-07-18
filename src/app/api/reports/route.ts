@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await connectDB();
-    const { patientId, painAreas, overallScore, findings, suggestedExercises, doctorNotes } =
+    const { patientId, painAreas, overallScore, findings, suggestedExercises, doctorNotes, shareId } =
       (await req.json().catch(() => ({}))) || {};
 
     if (!patientId) return NextResponse.json({ error: 'patientId is required' }, { status: 400 });
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     const report = new Report({
       patient: patient._id,
       doctor: user._id,
+      shareId: typeof shareId === 'string' ? shareId : null,
       painAreas: Array.isArray(painAreas) ? painAreas : patient.painAreas,
       overallScore: typeof overallScore === 'number' ? overallScore : null,
       findings: list,

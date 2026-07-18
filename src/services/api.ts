@@ -181,6 +181,8 @@ export interface Report {
   id: string;
   patient: string;
   doctor: { id: string; name: string } | string;
+  /** Slug of the public, no-auth visual report at /r/:shareId (null for old reports). */
+  shareId: string | null;
   painAreas: string[];
   overallScore: number | null;
   findingsCount: number;
@@ -198,6 +200,8 @@ export interface NewReport {
   findings: ReportFinding[];
   suggestedExercises?: ReportExercise[];
   doctorNotes?: string;
+  /** Slug of the public visual report to link this record to (/r/:shareId). */
+  shareId?: string;
 }
 
 export async function listPatientReports(patientId: string): Promise<{ reports: Report[] }> {

@@ -43,9 +43,24 @@ const PREFIX = 'hm_report_';
 // /assessment while the (async) server upload is still in flight.
 const memoryCache = new Map<string, StoredReport>();
 
-/** Short, URL-safe id — enough entropy for a single browser's history. */
-function genId(): string {
-  return 'rep_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+/** URL-safe kebab slug from a patient's name (the human-readable URL prefix). */
+function slugify(name: string): string {
+  return (
+    (name || 'patient')
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'patient'
+  );
+}
+
+// Report id / URL slug: the patient's name plus a random suffix, e.g.
+// "ramesh-kumar-8f3k2plz9q". This is what the shareable report URL (`/r/:slug`)
+// uses — human-readable (name) yet unique per report. URL-safe (kebab only).
+function genId(name?: string): string {
+  const rand = Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
+  return `${slugify(name || 'patient')}-${rand}`;
 }
 
 /**
@@ -58,7 +73,7 @@ export function createStoredReport(input: {
   captures: AssessmentCapture[];
   extraShots: ExtraShot[];
 }): string {
-  const id = genId();
+  const id = genId(input.patient?.name);
   const report: StoredReport = {
     id,
     patient: input.patient,

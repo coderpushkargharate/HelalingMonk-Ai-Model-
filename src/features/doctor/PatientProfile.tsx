@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, Activity, FileText, Stethoscope } from 'lucide-react';
+import { ChevronLeft, Activity, FileText, Stethoscope, ExternalLink } from 'lucide-react';
 import { Patient, Report, listPatientReports } from '@/services/api';
 
 interface Props {
@@ -86,7 +86,13 @@ export default function PatientProfile({ patient, onBack, onStartAssessment }: P
       ) : (
         <ol className="space-y-3">
           {reports.map((r) => (
-            <li key={r.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+            <li
+              key={r.id}
+              onClick={() => r.shareId && window.open(`/r/${r.shareId}`, '_blank', 'noopener')}
+              className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm ${
+                r.shareId ? 'cursor-pointer hover:border-green-300 hover:shadow transition' : ''
+              }`}
+            >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="bg-green-50 rounded-lg p-2">
@@ -103,7 +109,12 @@ export default function PatientProfile({ patient, onBack, onStartAssessment }: P
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="flex items-center gap-3">
+                  {r.shareId && (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700">
+                      <ExternalLink className="w-3.5 h-3.5" /> Open
+                    </span>
+                  )}
                   <p className={`text-2xl font-bold ${SCORE_COLOR(r.overallScore)}`}>
                     {r.overallScore ?? '—'}
                     <span className="text-sm text-gray-400">/100</span>

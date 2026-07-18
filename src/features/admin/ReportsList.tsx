@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ExternalLink } from 'lucide-react';
 import { ReportListItem, listAllReports } from '@/services/api';
 import { formatDate } from '@/utils/formatter';
+
+// Open a report's public, no-auth visual URL (name-based /r/:slug) in a new tab.
+function openReport(shareId: string | null) {
+  if (shareId) window.open(`/r/${shareId}`, '_blank', 'noopener');
+}
 
 const SCORE_COLOR = (s: number | null) => {
   if (s == null) return 'text-gray-500';
@@ -63,11 +68,17 @@ export default function ReportsList() {
                 <th className="px-4 py-3 font-medium">Findings</th>
                 <th className="px-4 py-3 font-medium">Flagged</th>
                 <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium text-right">Report</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {reports.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
+                <tr
+                  key={r.id}
+                  onClick={() => openReport(r.shareId)}
+                  className={`${r.shareId ? 'cursor-pointer hover:bg-green-50/60' : 'hover:bg-gray-50'} transition-colors`}
+                  title={r.shareId ? 'Open the shareable report' : 'No shareable link for this report'}
+                >
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {r.patientInfo?.name || '—'}
                     {r.patientInfo?.patientId && (
@@ -89,6 +100,21 @@ export default function ReportsList() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(r.createdAt, true)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {r.shareId ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openReport(r.shareId);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-green-700 hover:text-green-800 text-xs font-semibold"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> View
+                      </button>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

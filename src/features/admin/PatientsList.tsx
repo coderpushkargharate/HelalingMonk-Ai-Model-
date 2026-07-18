@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Search, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, RefreshCw, Stethoscope } from 'lucide-react';
 import { Patient, listPatients } from '@/services/api';
 import { formatDate } from '@/utils/formatter';
 
 export default function PatientsList() {
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export default function PatientsList() {
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Patients</h2>
-          <p className="text-gray-600 text-sm">All registered patients across the clinic.</p>
+          <p className="text-gray-600 text-sm">All registered patients — open a patient to run an AI assessment.</p>
         </div>
         <form
           onSubmit={(e) => {
@@ -77,11 +79,16 @@ export default function PatientsList() {
                 <th className="px-4 py-3 font-medium">Pain areas</th>
                 <th className="px-4 py-3 font-medium">Doctor</th>
                 <th className="px-4 py-3 font-medium">Registered</th>
+                <th className="px-4 py-3 font-medium text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {patients.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-50">
+                <tr
+                  key={p.id}
+                  onClick={() => navigate(`/admin/patient/${p.id}`)}
+                  className="hover:bg-green-50/60 cursor-pointer transition-colors"
+                >
                   <td className="px-4 py-3 font-mono text-xs text-gray-500">{p.patientId}</td>
                   <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                   <td className="px-4 py-3 text-gray-600">{p.age ?? '—'}{p.gender ? ` · ${p.gender}` : ''}</td>
@@ -89,6 +96,17 @@ export default function PatientsList() {
                   <td className="px-4 py-3 text-gray-600">{p.painAreas.length ? p.painAreas.join(', ') : '—'}</td>
                   <td className="px-4 py-3 text-gray-600">{doctorName(p.assignedDoctor)}</td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(p.createdAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/admin/patient/${p.id}`);
+                      }}
+                      className="inline-flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition-colors"
+                    >
+                      <Stethoscope className="w-3.5 h-3.5" /> Assess
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

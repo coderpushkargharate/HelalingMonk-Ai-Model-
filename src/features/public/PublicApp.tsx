@@ -249,10 +249,11 @@ export default function PublicApp() {
                       navigate('/assessment');
                       return;
                     }
-                    // Persist the report and open it at its own permanent URL,
-                    // so it can be revisited later on this device.
+                    // Persist the report and open it at its own permanent,
+                    // name-based, no-auth URL (/r/:slug) — revisitable anytime,
+                    // on any device.
                     const id = createStoredReport({ patient, captures: caps, extraShots: extras });
-                    navigate(`/assessment/report/${id}`);
+                    navigate(`/r/${id}`);
                   }}
                 />
               ) : (
@@ -261,7 +262,11 @@ export default function PublicApp() {
             }
           />
 
-          {/* Each generated report lives at its own permanent URL. */}
+          {/* Each generated report lives at its own permanent, name-based,
+              NO-AUTH URL. `/r/:slug` is the short shareable form used by both
+              the guest flow and the doctor/admin panels; `/assessment/report/:id`
+              is kept as a back-compat alias. */}
+          <Route path="r/:id" element={<ReportRoute onRestart={restart} />} />
           <Route path="assessment/report/:id" element={<ReportRoute onRestart={restart} />} />
           {/* Legacy/bare report URL — nothing to show without an id. */}
           <Route path="assessment/report" element={<Navigate to="/assessment" replace />} />
