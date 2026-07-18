@@ -1,12 +1,15 @@
-// Client-side persistence for generated assessment reports.
+// Persistence for generated assessment reports.
 //
-// The public (guest) assessment flow has no login and no server record, so a
-// generated report would normally vanish on refresh. To let a report live at
-// its own URL and be reopened later, we persist the whole report — patient,
-// captures (with baked-in pose images), extra shots and the doctor's edits —
-// into localStorage keyed by a unique id. Same-device only, by design.
+// The public (guest) assessment flow has no login, so a generated report would
+// normally vanish on refresh. To let a report live at its own URL and be
+// reopened later — from ANY browser or device — we persist the whole report
+// (patient, captures with baked-in pose images, extra shots and the doctor's
+// edits) both to the server (source of truth, keyed by id) and to localStorage
+// (a fast local cache so the generating device reopens instantly and offline).
 
 import type { PatientInfo, AssessmentCapture, ExtraShot } from './clinicalKnowledge';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 /** A doctor's per-posture clinical input, persisted with the report. */
 export interface DoctorFindingData {
@@ -47,7 +50,7 @@ export function createStoredReport(input: {
   extraShots: ExtraShot[];
 }): string {
   const id = genId();
-  persist({
+  const report: StoredReport = {
     id,
     patient: input.patient,
     captures: input.captures,
@@ -56,8 +59,39 @@ export function createStoredReport(input: {
     doctorNotes: '',
     doctorPoints: [],
     findingData: {},
-  });
+  };
+  persist(report);
+  // Upload to the server so the URL opens on any device. Fire-and-forget: the
+  // local cache already has it, so the report is usable immediately.
+  saveToServer(report);
   return id;
+}
+
+/** Push a report to the server (best-effort — local cache is the fallback). */
+function saveToServer(report: StoredReport): void {
+  fetch(`${API_URL}/public/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(report),
+  }).catch((err) => console.warn('Could not sync report to server:', err));
+}
+
+/**
+ * Load a report by id: instant from the local cache when present, otherwise
+ * fetched from the server (and cached locally) so the URL works cross-device.
+ */
+export async function fetchStoredReport(id: string): Promise<StoredReport | null> {
+  const local = getStoredReport(id);
+  if (local) return local;
+  try {
+    const res = await fetch(`${API_URL}/public/reports/${id}`);
+    if (!res.ok) return null;
+    const report = (await res.json()) as StoredReport;
+    persist(report); // cache for next time / offline
+    return report;
+  } catch {
+    return null;
+  }
 }
 
 function persist(report: StoredReport): void {
@@ -94,5 +128,8 @@ export function getStoredReport(id: string): StoredReport | null {
 export function updateStoredReport(id: string, patch: Partial<StoredReport>): void {
   const existing = getStoredReport(id);
   if (!existing) return;
-  persist({ ...existing, ...patch });
+  const updated = { ...existing, ...patch };
+  persist(updated);
+  // Keep the server copy in sync so edits show on other devices too.
+  saveToServer(updated);
 }

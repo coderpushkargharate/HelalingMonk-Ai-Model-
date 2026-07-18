@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Patient } from '../models/Patient.js';
 import { Appointment } from '../models/Appointment.js';
+import { PublicReport } from '../models/PublicReport.js';
 import { sendMail, appointmentBookedEmail } from '../lib/mailer.js';
 
 const router = Router();
@@ -67,6 +68,42 @@ router.post('/booking', async (req, res) => {
   } catch (err) {
     console.error('public booking error', err);
     res.status(500).json({ error: 'Could not submit your booking. Please try again.' });
+  }
+});
+
+// ── Public assessment reports ─────────────────────────────────────────────
+// Store/fetch a full guest report by its client id so the report URL works
+// across browsers and devices (not just the device that generated it).
+
+// Upsert a report. Body is the whole StoredReport blob, including its `id`.
+router.post('/reports', async (req, res) => {
+  try {
+    const report = req.body || {};
+    const reportId = report.id;
+    if (!reportId || typeof reportId !== 'string') {
+      return res.status(400).json({ error: 'Report id is required' });
+    }
+    await PublicReport.findOneAndUpdate(
+      { reportId },
+      { reportId, data: report },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.status(201).json({ ok: true, id: reportId });
+  } catch (err) {
+    console.error('public report save error', err);
+    res.status(500).json({ error: 'Could not save the report.' });
+  }
+});
+
+// Fetch a stored report by id.
+router.get('/reports/:id', async (req, res) => {
+  try {
+    const doc = await PublicReport.findOne({ reportId: req.params.id });
+    if (!doc) return res.status(404).json({ error: 'Report not found' });
+    res.json(doc.data);
+  } catch (err) {
+    console.error('public report fetch error', err);
+    res.status(500).json({ error: 'Could not load the report.' });
   }
 });
 

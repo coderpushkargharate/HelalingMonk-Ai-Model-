@@ -1,10 +1,16 @@
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Stethoscope } from 'lucide-react';
 import MarketingLayout from '../components/site/MarketingLayout';
 import { CLINICAL_ASSESSMENTS } from '../lib/clinicalKnowledge';
 import type { PatientInfo } from '../lib/clinicalKnowledge';
-import { createStoredReport, getStoredReport, updateStoredReport } from '../lib/reportStore';
+import type { StoredReport } from '../lib/reportStore';
+import {
+  createStoredReport,
+  getStoredReport,
+  updateStoredReport,
+  fetchStoredReport,
+} from '../lib/reportStore';
 
 // Route components are lazy-loaded so each screen ships in its own chunk. In
 // particular the capture/report screens (which pull in MediaPipe and jsPDF)
@@ -28,14 +34,33 @@ function RouteFallback() {
   );
 }
 
-// Loads a saved report by its URL id and renders it (doctor-editable). All
-// doctor edits are written straight back to localStorage under the same id, so
-// the report reopens exactly as it was left.
+// Loads a saved report by its URL id and renders it (doctor-editable). The
+// report is fetched from the local cache first, then the server — so the URL
+// opens on any browser or device. Doctor edits persist back to both.
 function ReportRoute({ onRestart }: { onRestart: () => void }) {
   const { id } = useParams<{ id: string }>();
-  // Read once per id; edits persist to storage and reload on the next visit.
-  const report = useMemo(() => (id ? getStoredReport(id) : null), [id]);
+  const [report, setReport] = useState<StoredReport | null>(null);
+  // 'loading' until we know whether the report exists anywhere.
+  const [status, setStatus] = useState<'loading' | 'ready' | 'missing'>('loading');
 
+  useEffect(() => {
+    if (!id) {
+      setStatus('missing');
+      return;
+    }
+    let active = true;
+    setStatus('loading');
+    fetchStoredReport(id).then((r) => {
+      if (!active) return;
+      setReport(r);
+      setStatus(r ? 'ready' : 'missing');
+    });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
+  if (status === 'loading') return <RouteFallback />;
   if (!id || !report) return <Navigate to="/assessment" replace />;
 
   return (

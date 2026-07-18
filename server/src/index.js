@@ -21,7 +21,21 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '1mb' }));
+// Larger limit: public assessment reports carry base64 pose images.
+app.use(express.json({ limit: '25mb' }));
+
+// Request logger — prints every API call + status + duration to the terminal.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const s = res.statusCode;
+    const mark = s >= 500 ? '✗' : s >= 400 ? '⚠' : '✓';
+    const time = new Date().toLocaleTimeString();
+    console.log(`${mark} [${time}] ${req.method} ${req.originalUrl} → ${s} (${ms}ms)`);
+  });
+  next();
+});
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
