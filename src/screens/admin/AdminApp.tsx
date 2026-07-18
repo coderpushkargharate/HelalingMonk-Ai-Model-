@@ -1,28 +1,44 @@
-import { Activity, LogOut, LayoutGrid, CalendarDays } from 'lucide-react';
+import { Activity, LogOut, LayoutGrid, CalendarDays, Users, FileText, IndianRupee, UserCog } from 'lucide-react';
 import { Routes, Route, Navigate, Outlet, NavLink, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../lib/AuthContext';
 import { Role } from '../../lib/auth';
 import AdminDashboard from './AdminDashboard';
 import UserManagement from './UserManagement';
+import PatientsList from './PatientsList';
+import ReportsList from './ReportsList';
+import AppointmentsList from './AppointmentsList';
+import PaymentsList from './PaymentsList';
 import ReceptionDashboard from '../reception/ReceptionDashboard';
 import BookAppointment from '../reception/BookAppointment';
 
 // Admin (s-admin) URL space:
-//   /admin           → overview
-//   /admin/users     → user management (?role= to pre-filter)
-//   /admin/schedule  → clinic schedule
-//   /admin/book      → book appointment
+//   /admin              → overview (live totals)
+//   /admin/patients     → all patients
+//   /admin/reports      → all assessment reports
+//   /admin/appointments → all appointments
+//   /admin/payments     → all payments
+//   /admin/users        → user management (?role= to pre-filter)
+//   /admin/schedule     → clinic schedule (calendar) + /admin/book
 const navCls = ({ isActive }: { isActive: boolean }) =>
   `inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors ${
     isActive ? 'bg-green-600 text-white' : 'text-gray-600 hover:bg-gray-100'
   }`;
+
+const NAV = [
+  { to: '/admin', end: true, icon: LayoutGrid, label: 'Overview' },
+  { to: '/admin/patients', icon: Users, label: 'Patients' },
+  { to: '/admin/reports', icon: FileText, label: 'Reports' },
+  { to: '/admin/appointments', icon: CalendarDays, label: 'Appointments' },
+  { to: '/admin/payments', icon: IndianRupee, label: 'Payments' },
+  { to: '/admin/users', icon: UserCog, label: 'Users' },
+];
 
 function Chrome() {
   const { user, logout } = useAuth();
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-green-600 rounded-lg flex items-center justify-center">
               <Activity className="w-5 h-5 text-white" />
@@ -45,13 +61,12 @@ function Chrome() {
       </header>
 
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 py-2 flex items-center gap-2">
-          <NavLink to="/admin" end className={navCls}>
-            <LayoutGrid className="w-4 h-4" /> Overview
-          </NavLink>
-          <NavLink to="/admin/schedule" className={navCls}>
-            <CalendarDays className="w-4 h-4" /> Schedule
-          </NavLink>
+        <div className="max-w-6xl mx-auto px-4 py-2 flex items-center gap-1.5 overflow-x-auto">
+          {NAV.map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.end} className={navCls}>
+              <n.icon className="w-4 h-4" /> {n.label}
+            </NavLink>
+          ))}
         </div>
       </div>
 
@@ -73,14 +88,11 @@ export default function AdminApp() {
   return (
     <Routes>
       <Route element={<Chrome />}>
-        <Route
-          index
-          element={
-            <AdminDashboard
-              onOpenUsers={(r) => navigate(`/admin/users${r !== 'all' ? `?role=${r}` : ''}`)}
-            />
-          }
-        />
+        <Route index element={<AdminDashboard onNavigate={(p) => navigate(p)} />} />
+        <Route path="patients" element={<PatientsList />} />
+        <Route path="reports" element={<ReportsList />} />
+        <Route path="appointments" element={<AppointmentsList />} />
+        <Route path="payments" element={<PaymentsList />} />
         <Route path="users" element={<UsersRoute />} />
         <Route path="schedule" element={<ReceptionDashboard onBook={() => navigate('/admin/book')} />} />
         <Route

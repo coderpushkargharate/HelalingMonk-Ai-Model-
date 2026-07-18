@@ -219,12 +219,10 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-3">
               <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-amber-900">AI-generated information — not medically backed</p>
+                <p className="text-sm font-bold text-amber-900">AI estimates — not a medical diagnosis</p>
                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  All angles, scores and severities in this report are produced automatically by AI camera-based pose
-                  estimation. They are approximate estimates and <b>may not be true or accurate</b>. This information is
-                  <b> not medically verified</b> and must not be treated as a clinical diagnosis. Final judgement rests
-                  with the treating doctor — see each posture's <b>Doctor's Clinical Score</b> below.
+                  Angles, scores and severities are automated AI estimates and <b>may be inaccurate</b>. Final clinical
+                  judgement rests with the treating doctor.
                 </p>
               </div>
             </div>
@@ -281,10 +279,8 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
           {notesSection}
 
           <p className="text-[11px] text-gray-400 mt-8 border-t border-gray-100 pt-4">
-            Disclaimer: This report is generated using AI-based MediaPipe pose estimation and is intended to assist a
-            qualified therapist. It is not a substitute for in-person clinical examination. Measurement values are
-            camera-based estimates and are not medically verified — they should be validated and scored by the treating
-            doctor before any clinical decision.
+            Disclaimer: AI pose-estimation report to assist the therapist — not a substitute for in-person examination.
+            Values must be validated by the treating doctor before any clinical decision.
           </p>
         </div>
       </div>
@@ -514,9 +510,8 @@ function FindingCard({
           className="w-full min-h-[70px] border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
         />
         <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
-          Disclaimer: The AI measurement shown above is an automated camera-based estimate and is
-          <b> not medically verified</b> — it may not be accurate and must not be used as a diagnosis. The doctor's
-          score and remarks are the clinical judgement of record.
+          The AI measurement above is an automated estimate, not a diagnosis. The doctor's score and remarks are the
+          clinical judgement of record.
         </p>
       </div>
       )}

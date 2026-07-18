@@ -8,6 +8,28 @@ const router = Router();
 
 router.use(requireAuth);
 
+// List reports across patients. Admin sees all; a doctor sees only their own
+// unless ?scope=all. Newest first. Includes basic patient info for tables.
+router.get('/', requireRole('admin', 'doctor'), async (req, res) => {
+  const filter = {};
+  if (req.user.role === 'doctor' && req.query.scope !== 'all') {
+    filter.doctor = req.user._id;
+  }
+  const reports = await Report.find(filter)
+    .populate('doctor', 'name')
+    .populate('patient', 'name patientId')
+    .sort({ createdAt: -1 })
+    .limit(300);
+  res.json({
+    reports: reports.map((r) => ({
+      ...r.toJSONSafe(),
+      patientInfo: r.patient?._id
+        ? { id: r.patient._id.toString(), name: r.patient.name, patientId: r.patient.patientId }
+        : null,
+    })),
+  });
+});
+
 // Create a report from a completed AI assessment. Doctors only.
 router.post('/', requireRole('doctor', 'admin'), async (req, res) => {
   try {

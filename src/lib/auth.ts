@@ -202,6 +202,15 @@ export async function listPatientReports(patientId: string): Promise<{ reports: 
   return request(`/patients/${patientId}/reports`);
 }
 
+// Admin/doctor: every report across patients. Includes patientInfo for tables.
+export interface ReportListItem extends Report {
+  patientInfo: { id: string; name: string; patientId: string } | null;
+}
+
+export async function listAllReports(scope: 'all' | 'mine' = 'all'): Promise<{ reports: ReportListItem[] }> {
+  return request(`/reports${scope === 'all' ? '?scope=all' : ''}`);
+}
+
 export async function createReport(payload: NewReport): Promise<{ report: Report }> {
   return request('/reports', { method: 'POST', body: JSON.stringify(payload) });
 }
@@ -267,6 +276,58 @@ export async function setAppointmentStatus(
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
+}
+
+// ---- Public (no auth) ----
+
+// Lead-capture booking from the marketing home page. Creates/reuses a patient
+// and an optional pending appointment reception confirms. Matches POST /public/booking.
+export async function bookPublic(payload: {
+  name: string;
+  mobile?: string;
+  email?: string;
+  complaint?: string;
+  painAreas?: string[];
+  preferredAt?: string;
+}): Promise<{ ok: boolean; patientId: string; appointmentId: string | null }> {
+  return request('/public/booking', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+// ---- Payments ----
+
+export type PaymentStatus = 'created' | 'paid' | 'failed' | 'refunded';
+
+export interface Payment {
+  id: string;
+  patient: string;
+  amount: number; // paise
+  currency: string;
+  method: 'online' | 'cash';
+  status: PaymentStatus;
+  plan: string;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  createdAt?: string;
+}
+
+export async function listPayments(patientId?: string): Promise<{ payments: Payment[] }> {
+  return request(`/payments${patientId ? `?patient=${patientId}` : ''}`);
+}
+
+// ---- Admin analytics ----
+
+export interface AdminStats {
+  patients: number;
+  reports: number;
+  appointments: number;
+  usersByRole: Record<Role, number>;
+  apptStatus: Partial<Record<AppointmentStatus, number>>;
+  revenuePaise: number;
+  paidCount: number;
+}
+
+export async function getAdminStats(): Promise<{ stats: AdminStats }> {
+  return request('/admin/stats');
 }
 
 // ---- Patient self-service (matched to clinic record by email) ----

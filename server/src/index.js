@@ -9,6 +9,8 @@ import reportRoutes from './routes/reports.js';
 import appointmentRoutes from './routes/appointments.js';
 import meRoutes from './routes/me.js';
 import publicRoutes from './routes/public.js';
+import paymentRoutes from './routes/payments.js';
+import adminRoutes from './routes/admin.js';
 import { PERMISSIONS } from './permissions.js';
 
 const app = express();
@@ -31,6 +33,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/patients', patientRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/appointments', appointmentRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/api/me', meRoutes);
 app.use('/api/public', publicRoutes);
 
