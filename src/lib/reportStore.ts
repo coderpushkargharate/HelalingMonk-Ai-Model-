@@ -34,6 +34,14 @@ export interface StoredReport {
 
 const PREFIX = 'hm_report_';
 
+// In-memory cache of reports created/opened this session. This is the reliable
+// fallback when localStorage is full: guest reports carry several full-res
+// base64 pose images and can exceed the browser's ~5MB quota, so persist() may
+// silently fail. Keeping the report in memory guarantees the URL we navigate to
+// right after "Generate Report" can always render it — no bounce back to
+// /assessment while the (async) server upload is still in flight.
+const memoryCache = new Map<string, StoredReport>();
+
 /** Short, URL-safe id — enough entropy for a single browser's history. */
 function genId(): string {
   return 'rep_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4);
@@ -60,6 +68,7 @@ export function createStoredReport(input: {
     doctorPoints: [],
     findingData: {},
   };
+  memoryCache.set(id, report);
   persist(report);
   // Upload to the server so the URL opens on any device. Fire-and-forget: the
   // local cache already has it, so the report is usable immediately.
@@ -87,6 +96,7 @@ export async function fetchStoredReport(id: string): Promise<StoredReport | null
     const res = await fetch(`${API_URL}/public/reports/${id}`);
     if (!res.ok) return null;
     const report = (await res.json()) as StoredReport;
+    memoryCache.set(report.id, report);
     persist(report); // cache for next time / offline
     return report;
   } catch {
@@ -116,9 +126,16 @@ function persist(report: StoredReport): void {
 }
 
 export function getStoredReport(id: string): StoredReport | null {
+  // Prefer the in-memory copy — it always has the full report even when
+  // localStorage rejected it for quota (see memoryCache above).
+  const cached = memoryCache.get(id);
+  if (cached) return cached;
   try {
     const raw = localStorage.getItem(PREFIX + id);
-    return raw ? (JSON.parse(raw) as StoredReport) : null;
+    if (!raw) return null;
+    const report = JSON.parse(raw) as StoredReport;
+    memoryCache.set(id, report);
+    return report;
   } catch {
     return null;
   }
@@ -129,6 +146,7 @@ export function updateStoredReport(id: string, patch: Partial<StoredReport>): vo
   const existing = getStoredReport(id);
   if (!existing) return;
   const updated = { ...existing, ...patch };
+  memoryCache.set(id, updated);
   persist(updated);
   // Keep the server copy in sync so edits show on other devices too.
   saveToServer(updated);
