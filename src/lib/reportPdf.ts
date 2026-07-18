@@ -76,7 +76,7 @@ export async function downloadReportPdf(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(100);
-  doc.text('AI Clinical Posture & Movement Report', margin, y + 5.5);
+  doc.text('Clinical Posture & Movement Report', margin, y + 5.5);
   doc.setTextColor(120);
   doc.text(new Date().toLocaleDateString(), pageW - margin, y, { align: 'right' });
   y += 12;
@@ -156,13 +156,13 @@ export async function downloadReportPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.setTextColor(146, 64, 14);
-  doc.text('AI-generated — not a medical diagnosis', margin + 3, y + 5);
+  doc.text('Automated report — not a medical diagnosis', margin + 3, y + 5);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(180, 83, 9);
   doc.text(
     doc.splitTextToSize(
-      'All values are approximate AI camera-based estimates and are not medically verified. Final judgement rests with the treating clinician.',
+      'All values are approximate camera-based estimates and are not medically verified. Final judgement rests with the treating clinician.',
       contentW - 6
     ),
     margin + 3,
@@ -310,7 +310,7 @@ export async function downloadReportPdf(
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `HealingMonk · AI estimate, not medically verified · Page ${p} of ${pages}`,
+      `HealingMonk · estimate, not medically verified · Page ${p} of ${pages}`,
       pageW / 2,
       pageH - 6,
       { align: 'center' }

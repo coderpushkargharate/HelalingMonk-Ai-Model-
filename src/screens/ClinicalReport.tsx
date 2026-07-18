@@ -136,7 +136,7 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-green-600 font-bold text-lg">HealingMonk</p>
-                <p className="text-gray-500 text-sm">AI Clinical Posture & Movement Report</p>
+                <p className="text-gray-500 text-sm">Clinical Posture & Movement Report</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500">Date</p>
@@ -219,9 +219,9 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
             <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex gap-3">
               <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-bold text-amber-900">AI estimates — not a medical diagnosis</p>
+                <p className="text-sm font-bold text-amber-900">Automated estimates — not a medical diagnosis</p>
                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  Angles, scores and severities are automated AI estimates and <b>may be inaccurate</b>. Final clinical
+                  Angles, scores and severities are automated estimates and <b>may be inaccurate</b>. Final clinical
                   judgement rests with the treating doctor.
                 </p>
               </div>
@@ -279,7 +279,7 @@ export default function ClinicalReport({ patient, captures, extraShots = [], onR
           {notesSection}
 
           <p className="text-[11px] text-gray-400 mt-8 border-t border-gray-100 pt-4">
-            Disclaimer: AI pose-estimation report to assist the therapist — not a substitute for in-person examination.
+            Disclaimer: Automated pose-estimation report to assist the therapist — not a substitute for in-person examination.
             Values must be validated by the treating doctor before any clinical decision.
           </p>
         </div>
@@ -336,11 +336,11 @@ function FindingCard({
                 back to the raw frame only if the overlay snapshot is missing. */}
             <img
               src={capture.imageData || capture.rawImageData}
-              alt={`${assessment.name} — patient photo with AI pose points`}
+              alt={`${assessment.name} — patient photo with pose points`}
               className="w-full h-44 object-cover bg-gray-900"
             />
             <figcaption className="absolute bottom-1 left-1 text-[10px] font-semibold bg-black/60 text-white px-1.5 py-0.5 rounded">
-              Patient Photo · AI points
+              Patient Photo · pose points
             </figcaption>
           </figure>
           <figure className="relative border-l border-gray-200 bg-slate-50 flex items-center justify-center">
@@ -397,7 +397,7 @@ function FindingCard({
               <p className="text-2xl font-bold leading-none" style={{ color }}>
                 {capture.value !== null ? `${capture.value}${assessment.unit}` : 'N/A'}
               </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">Your value (AI estimate)</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">Your value (estimate)</p>
             </div>
             <div>
               <p className="text-[11px] text-gray-500">Ideal</p>
@@ -453,7 +453,7 @@ function FindingCard({
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">
             <span>Pain area: <b className="text-gray-700">{assessment.painArea}</b></span>
             <span>Correlation: <b className="text-gray-700">{assessment.painCorrelation}</b></span>
-            <span>AI feasibility: <b className="text-gray-700">{assessment.aiFeasibility}</b></span>
+            <span>Feasibility: <b className="text-gray-700">{assessment.aiFeasibility}</b></span>
             <span>Source: <b className="text-gray-700">{assessment.source}</b></span>
           </div>
         </div>
@@ -510,7 +510,7 @@ function FindingCard({
           className="w-full min-h-[70px] border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
         />
         <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">
-          The AI measurement above is an automated estimate, not a diagnosis. The doctor's score and remarks are the
+          The measurement above is an automated estimate, not a diagnosis. The doctor's score and remarks are the
           clinical judgement of record.
         </p>
       </div>
@@ -522,7 +522,7 @@ function FindingCard({
         <div className="bg-amber-50 border-t border-amber-100 p-4 break-inside-avoid">
           <p className="text-xs font-semibold text-amber-800 flex items-center gap-1 mb-2">
             <AlertTriangle className="w-3.5 h-3.5" /> Recommended Exercises
-            <span className="ml-auto text-[10px] text-amber-500 font-medium">AI-suggested · editable by doctor</span>
+            <span className="ml-auto text-[10px] text-amber-500 font-medium">Suggested · editable by doctor</span>
           </p>
           <textarea
             value={docExercises}
