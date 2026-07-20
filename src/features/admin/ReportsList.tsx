@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, ExternalLink } from 'lucide-react';
+import { RefreshCw, ExternalLink, Eye, X } from 'lucide-react';
 import { ReportListItem, listAllReports } from '@/services/api';
 import { formatDate } from '@/utils/formatter';
 
@@ -15,10 +15,170 @@ const SCORE_COLOR = (s: number | null) => {
   return 'text-red-600';
 };
 
+const SEVERITY_BADGE: Record<string, string> = {
+  normal: 'bg-green-100 text-green-700',
+  mild: 'bg-amber-100 text-amber-700',
+  moderate: 'bg-orange-100 text-orange-700',
+  severe: 'bg-red-100 text-red-700',
+};
+
+// In-app report detail. Works for every report — including those with no
+// shareable link — since the row already carries the full findings/notes.
+function ReportDetailModal({ report, onClose }: { report: ReportListItem; onClose: () => void }) {
+  const doctorName = report.doctor && typeof report.doctor === 'object' ? report.doctor.name : '—';
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-xl w-full max-w-3xl my-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-gray-100 p-6">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">
+              {report.patientInfo?.name || 'Patient'}
+              {report.patientInfo?.patientId && (
+                <span className="ml-2 font-mono text-xs text-gray-400">{report.patientInfo.patientId}</span>
+              )}
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {formatDate(report.createdAt, true)} · Dr. {doctorName}
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className={`text-3xl font-bold leading-none ${SCORE_COLOR(report.overallScore)}`}>
+                {report.overallScore ?? '—'}
+                <span className="text-sm text-gray-400">/100</span>
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Overall score</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700" aria-label="Close">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Pain areas */}
+          {report.painAreas.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pain areas</h4>
+              <div className="flex flex-wrap gap-1.5">
+                {report.painAreas.map((a) => (
+                  <span key={a} className="text-xs font-medium bg-red-50 text-red-600 px-2 py-0.5 rounded-full">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Findings */}
+          <div>
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Findings ({report.findings.length})
+            </h4>
+            {report.findings.length === 0 ? (
+              <p className="text-sm text-gray-400">No findings recorded.</p>
+            ) : (
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-left">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Assessment</th>
+                      <th className="px-3 py-2 font-medium">Region</th>
+                      <th className="px-3 py-2 font-medium">Measurement</th>
+                      <th className="px-3 py-2 font-medium">Severity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {report.findings.map((f, i) => (
+                      <tr key={i}>
+                        <td className="px-3 py-2 font-medium text-gray-900">{f.name}</td>
+                        <td className="px-3 py-2 text-gray-600">{f.bodyRegion || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">
+                          {f.value != null ? `${f.value}${f.unit || ''}` : '—'}
+                          {f.measurementName && <span className="text-gray-400"> · {f.measurementName}</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                              SEVERITY_BADGE[f.severity || 'normal'] || 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            {f.severity || 'normal'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Suggested exercises */}
+          {report.suggestedExercises.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Suggested exercises
+              </h4>
+              <ul className="space-y-1.5">
+                {report.suggestedExercises.map((ex, i) => (
+                  <li key={i} className="text-sm text-gray-700">
+                    <span className="font-medium text-gray-900">{ex.name}</span>
+                    {(ex.sets || ex.reps || ex.frequency) && (
+                      <span className="text-gray-500">
+                        {' '}
+                        — {[ex.sets, ex.reps, ex.frequency].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Doctor notes */}
+          {report.doctorNotes && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Doctor notes</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{report.doctorNotes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex justify-end gap-2 border-t border-gray-100 p-4">
+          {report.shareId && (
+            <button
+              onClick={() => openReport(report.shareId)}
+              className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium py-2 px-4 rounded-lg"
+            >
+              <ExternalLink className="w-4 h-4" /> Open shareable report
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ReportsList() {
   const [reports, setReports] = useState<ReportListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [selected, setSelected] = useState<ReportListItem | null>(null);
 
   async function load() {
     setLoading(true);
@@ -38,6 +198,13 @@ export default function ReportsList() {
   }, []);
 
   const doctorName = (d: ReportListItem['doctor']) => (d && typeof d === 'object' ? d.name : '—');
+
+  // Show the report exactly as it looks when created: open the full visual
+  // report (/r/:slug). Old reports with no share link fall back to the summary.
+  const viewReport = (r: ReportListItem) => {
+    if (r.shareId) openReport(r.shareId);
+    else setSelected(r);
+  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -75,9 +242,9 @@ export default function ReportsList() {
               {reports.map((r) => (
                 <tr
                   key={r.id}
-                  onClick={() => openReport(r.shareId)}
-                  className={`${r.shareId ? 'cursor-pointer hover:bg-green-50/60' : 'hover:bg-gray-50'} transition-colors`}
-                  title={r.shareId ? 'Open the shareable report' : 'No shareable link for this report'}
+                  onClick={() => viewReport(r)}
+                  className="cursor-pointer hover:bg-green-50/60 transition-colors"
+                  title="View this report"
                 >
                   <td className="px-4 py-3 font-medium text-gray-900">
                     {r.patientInfo?.name || '—'}
@@ -101,19 +268,15 @@ export default function ReportsList() {
                   </td>
                   <td className="px-4 py-3 text-gray-500">{formatDate(r.createdAt, true)}</td>
                   <td className="px-4 py-3 text-right">
-                    {r.shareId ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openReport(r.shareId);
-                        }}
-                        className="inline-flex items-center gap-1.5 text-green-700 hover:text-green-800 text-xs font-semibold"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" /> View
-                      </button>
-                    ) : (
-                      <span className="text-xs text-gray-300">—</span>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        viewReport(r);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-green-700 hover:text-green-800 text-xs font-semibold"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> View report
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -121,6 +284,8 @@ export default function ReportsList() {
           </table>
         )}
       </div>
+
+      {selected && <ReportDetailModal report={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
